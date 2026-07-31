@@ -108,7 +108,7 @@
    "fieldname": "app_switcher_logo",
    "fieldtype": "Attach Image",
    "label": "App Switcher Logo",
-   "make_attachment_public": 1
+   "make_attachment_public": 0
   },
   {
    "fieldname": "favicon",

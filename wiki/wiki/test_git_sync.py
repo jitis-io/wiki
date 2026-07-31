@@ -5,6 +5,7 @@ import hashlib
 import json
 
 import frappe
+from frappe.core.doctype.file.utils import get_content_hash
 from frappe.tests.utils import FrappeTestCase
 
 from wiki.wiki import git_sync
@@ -920,7 +921,7 @@ class TestGitSyncImages(FrappeTestCase):
 		return frappe.get_all(
 			"File",
 			filters={"attached_to_doctype": "Wiki Space", "attached_to_name": space.name},
-			fields=["name", "file_name", "file_url"],
+			fields=["name", "file_name", "file_url", "file_size", "content_hash", "is_private"],
 		)
 
 	def test_relative_image_imported_and_link_rewritten(self):
@@ -938,11 +939,12 @@ class TestGitSyncImages(FrappeTestCase):
 
 		setup = next(n for n in nodes if n["source_path"] == "docs/guides/setup.md")
 		self.assertNotIn("../img/logo.png", setup["content"])
-		self.assertRegex(setup["content"], r"!\[logo\]\(/files/gitimg-[^)]+\)")
+		self.assertRegex(setup["content"], r"!\[logo\]\(/private/files/gitimg-[^)]+\)")
 
 		files = self._files_for(space)
 		self.assertEqual(len(files), 1)
 		self.assertTrue(files[0].file_name.startswith("gitimg-"))
+		self.assertEqual(files[0].is_private, 1)
 
 	def test_external_and_absolute_urls_untouched(self):
 		self._set_webp(False)
@@ -990,7 +992,14 @@ class TestGitSyncImages(FrappeTestCase):
 
 		nodes, _, _ = build_nodes("acme/docs", repo.tree(), "docs", space=space)
 		content = next(n for n in nodes if n["source_path"] == "docs/p.md")["content"]
-		self.assertRegex(content, r"/files/gitimg-[^)]+\.webp")
+		self.assertRegex(content, r"/private/files/gitimg-[^)]+\.webp")
+		files = self._files_for(space)
+		self.assertEqual(len(files), 1)
+		file_doc = frappe.get_doc("File", files[0].name)
+		with open(file_doc.get_full_path(), "rb") as handle:
+			stored = handle.read()
+		self.assertEqual(file_doc.file_size, len(stored))
+		self.assertEqual(file_doc.content_hash, get_content_hash(stored))
 
 	def test_no_webp_keeps_original_extension(self):
 		self._set_webp(False)
@@ -1000,7 +1009,7 @@ class TestGitSyncImages(FrappeTestCase):
 
 		nodes, _, _ = build_nodes("acme/docs", repo.tree(), "docs", space=space)
 		content = next(n for n in nodes if n["source_path"] == "docs/p.md")["content"]
-		self.assertRegex(content, r"/files/gitimg-[^)]+\.png")
+		self.assertRegex(content, r"/private/files/gitimg-[^)]+\.png")
 		self.assertNotIn(".webp", content)
 
 

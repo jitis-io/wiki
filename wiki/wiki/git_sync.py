@@ -158,7 +158,7 @@ def _is_repo_relative(src: str) -> bool:
 def _import_repo_image(
 	space: frappe.Document, repo_path: str, sha: str, repo: str, token: str | None = None
 ) -> str | None:
-	"""Import one repo image as a Frappe File, returning its ``/files/…`` URL.
+	"""Import one repo image as a private Frappe File.
 
 	Idempotent per (space, blob SHA): the File is named ``gitimg-<sha>.<ext>`` and
 	attached to the Wiki Space, so an unchanged image SHA reuses the existing File
@@ -186,7 +186,7 @@ def _import_repo_image(
 			"file_name": f"{stem}{ext}",
 			"attached_to_doctype": "Wiki Space",
 			"attached_to_name": space.name,
-			"is_private": 0,
+			"is_private": 1,
 			"content": image_bytes,
 		}
 	).insert(ignore_permissions=True)

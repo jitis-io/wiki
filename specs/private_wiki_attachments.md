@@ -38,8 +38,9 @@ Wiki cutover.
 4. For an otherwise-owned public URL referenced by a Wiki record, create a
    distinct private `File` row attached to that Wiki record and rewrite only
    the Wiki reference.
-5. Remove obsolete Wiki-owned public `File` rows and public blobs only when no
-   remaining public `File` row uses the URL.
+5. Retain the migrated Wiki-owned `File` rows at their new private URLs and
+   remove obsolete public blobs only when no remaining `File` row uses the old
+   URL.
 6. Clear Wiki content caches after changes.
 
 The migration runs as an explicit patch for upgrades and as an idempotent
@@ -54,5 +55,7 @@ The migration runs as an explicit patch for upgrades and as an idempotent
 - Integration test: a missing source fails in preflight without partial
   changes.
 - Integration test: the migration is idempotent.
+- Integration test: a restricted Wiki Space's read role governs access to the
+  resulting private `File`; an unlisted Guest cannot read it.
 - Unit/quality checks and the complete Wiki server test suite pass in a clean
   Frappe container.

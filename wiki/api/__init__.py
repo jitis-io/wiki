@@ -67,32 +67,38 @@ def convert_file_to_webp(file_doc) -> str:
 	file_url. Returns the new (or unchanged, if not convertible) file_url.
 	"""
 	from frappe.core.doctype.file.file import get_local_image
-	from frappe.core.doctype.file.utils import delete_file
+	from frappe.core.doctype.file.utils import delete_file, get_content_hash
 
 	if not file_doc:
 		return ""
 
 	file_url = file_doc.file_url or ""
 	# Only act on local site files of a convertible raster format.
-	if not file_url.startswith("/files") or not file_url.lower().endswith(CONVERTIBLE_IMAGE_EXTENSIONS):
+	if not file_url.startswith(("/files/", "/private/files/")) or not file_url.lower().endswith(
+		CONVERTIBLE_IMAGE_EXTENSIONS
+	):
 		return file_url
 
 	try:
 		image, _, _ = get_local_image(file_url)
-		image.save(_to_webp(file_doc.get_full_path()), "WEBP")
+		webp_path = _to_webp(file_doc.get_full_path())
+		image.save(webp_path, "WEBP")
 	except Exception:
 		# Corrupt or unsupported image — keep the original upload rather than
 		# failing the whole request and losing the author's image.
 		frappe.log_error(title="Wiki WebP conversion failed")
 		return file_url
 
-	# delete_file resolves public/private from the URL's leading segment, so it
-	# must be given the /files/... url — not the absolute filesystem path.
+	# delete_file resolves public/private from the URL's leading segment.
 	delete_file(file_url)
 
 	file_doc.file_url = _to_webp(file_url)
 	if file_doc.file_name:
 		file_doc.file_name = _to_webp(file_doc.file_name)
+	with open(webp_path, "rb") as handle:
+		webp_content = handle.read()
+	file_doc.content_hash = get_content_hash(webp_content)
+	file_doc.file_size = len(webp_content)
 	file_doc.save()
 	return file_doc.file_url
 

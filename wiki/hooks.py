@@ -87,7 +87,7 @@ jinja = {
 # before_install = "wiki.install.before_install"
 after_install = "wiki.install.after_install"
 
-# after_migrate = ["wiki.wiki.doctype.wiki_page.search.build_index_in_background"]
+after_migrate = ["wiki.privacy.ensure_wiki_attachments_private"]
 
 # Desk Notifications
 # ------------------
@@ -124,14 +124,20 @@ has_permission = {
 # Hook on document methods and events
 
 doc_events = {
+	"File": {
+		"before_insert": "wiki.privacy.enforce_private_wiki_attachment",
+		"before_validate": "wiki.privacy.enforce_private_wiki_attachment",
+	},
 	"User": {"after_insert": "wiki.utils.add_wiki_user_role"},
 	"Wiki Document": {
+		"before_validate": "wiki.privacy.validate_private_wiki_references",
 		"on_update": "wiki.frappe_wiki.doctype.wiki_document.wiki_document.on_wiki_document_update",
 		"on_trash": "wiki.frappe_wiki.doctype.wiki_document.wiki_document.on_wiki_document_trash",
 	},
 	# A space's roles, route and publish state decide what the crawler indexes
 	# list, and none of them touch a Wiki Document.
 	"Wiki Space": {
+		"before_validate": "wiki.privacy.validate_private_wiki_references",
 		"on_update": "wiki.wiki.crawler_cache.clear_crawler_cache",
 		"on_trash": "wiki.wiki.crawler_cache.clear_crawler_cache",
 	},
