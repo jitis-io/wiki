@@ -314,7 +314,7 @@ class TestGetWebContext(WikiDocumentTestBase):
 			self,
 			"Video Document",
 			parent=root_group.name,
-			content="![Demo Video](/files/demo-video.mp4)",
+			content="![Demo Video](/private/files/demo-video.mp4)",
 		)
 		create_test_wiki_space(self, "Video Space", "video-space", root_group.name)
 
@@ -323,11 +323,11 @@ class TestGetWebContext(WikiDocumentTestBase):
 
 		self.assertIn('<div data-type="video-block"', context["rendered_content"])
 		self.assertIn(
-			'<video src="/files/demo-video.mp4" controls preload="metadata">',
+			'<video src="/private/files/demo-video.mp4" controls preload="metadata">',
 			context["rendered_content"],
 		)
-		self.assertIn('<source src="/files/demo-video.mp4" />', context["rendered_content"])
-		self.assertNotIn('<img src="/files/demo-video.mp4"', context["rendered_content"])
+		self.assertIn('<source src="/private/files/demo-video.mp4" />', context["rendered_content"])
+		self.assertNotIn('<img src="/private/files/demo-video.mp4"', context["rendered_content"])
 
 	def test_wiki_spaces_for_switcher_ordered_by_switcher_order_then_name(self):
 		"""
@@ -445,7 +445,7 @@ class TestGetWebContextMetaTags(WikiDocumentTestBase):
 
 		doc.meta_title = "Custom Meta Title"
 		doc.meta_description = "Custom meta description for SEO."
-		doc.meta_image = "/files/meta-preview.png"
+		doc.meta_image = "/private/files/meta-preview.png"
 		doc.save()
 		doc.reload()
 
@@ -455,7 +455,7 @@ class TestGetWebContextMetaTags(WikiDocumentTestBase):
 		self.assertEqual(metatags["title"], "Custom Meta Title")
 		self.assertEqual(metatags["description"], "Custom meta description for SEO.")
 		self.assertEqual(metatags["og:title"], "Custom Meta Title")
-		self.assertEqual(metatags["og:image"], frappe.utils.get_url("/files/meta-preview.png"))
+		self.assertEqual(metatags["og:image"], frappe.utils.get_url("/private/files/meta-preview.png"))
 		self.assertEqual(metatags["twitter:card"], "summary_large_image")
 		self.assertEqual(metatags["og:site_name"], "Meta Space")
 
@@ -514,7 +514,7 @@ class TestRenderedPageMetaTags(WikiDocumentTestBase):
 
 		doc.meta_title = "Rendered Meta Title"
 		doc.meta_description = "Rendered meta description."
-		doc.meta_image = "/files/rendered-preview.png"
+		doc.meta_image = "/private/files/rendered-preview.png"
 		doc.save()
 		doc.reload()
 		frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
@@ -3196,12 +3196,12 @@ class TestOGImageMetaTags(OGImageTestBase):
 
 	def test_explicit_meta_image_wins_over_the_generated_card(self):
 		doc = self._published_page("og-meta-explicit")
-		doc.meta_image = "/files/hand-made.png"
+		doc.meta_image = "/private/files/hand-made.png"
 		doc.save()
 
 		metatags = doc.get_web_context()["metatags"]
 
-		self.assertEqual(metatags["og:image"], frappe.utils.get_url("/files/hand-made.png"))
+		self.assertEqual(metatags["og:image"], frappe.utils.get_url("/private/files/hand-made.png"))
 		self.assertNotIn("og:image:width", metatags)
 
 	def test_toggle_off_emits_no_image_tags(self):

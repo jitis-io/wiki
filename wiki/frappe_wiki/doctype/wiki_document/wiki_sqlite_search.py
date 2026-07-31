@@ -102,7 +102,10 @@ def enqueue_reindex(docnames: list[str]):
 
 	try:
 		for docname in docnames:
-			search.add_to_queue(f"Wiki Document:{docname}")
+			# ``index_doc`` is the stable public API across Frappe 16 releases:
+			# 16.29 indexes synchronously, while newer releases enqueue the same
+			# document for their scheduled queue consumer.
+			search.index_doc("Wiki Document", docname)
 	except Exception:
 		frappe.log_error(
 			title="Wiki Search Reindex Queue Error",
