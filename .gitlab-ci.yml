@@ -1,0 +1,33 @@
+stages:
+  - quality
+  - integration
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+default:
+  interruptible: true
+
+variables:
+  DOCKER_HOST: ""
+  COMPOSE_PROJECT_NAME: "wiki_${CI_PIPELINE_ID}_${CI_JOB_ID}"
+
+quality:
+  stage: quality
+  image: docker:29-cli
+  script:
+    - docker compose -f ci/compose.yaml run --build --rm quality
+  after_script:
+    - docker compose -f ci/compose.yaml down --volumes --remove-orphans
+
+integration:
+  stage: integration
+  image: docker:29-cli
+  timeout: 60m
+  script:
+    - docker compose -f ci/compose.yaml run --build --rm integration
+  after_script:
+    - docker compose -f ci/compose.yaml down --volumes --remove-orphans

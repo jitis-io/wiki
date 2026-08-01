@@ -143,6 +143,12 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 	def test_guest_role_makes_space_publicly_readable(self):
 		self.assertTrue(can_read_space(self.public, "Guest"))
 
+	def test_unpublished_space_is_not_guest_readable_even_with_stale_guest_role(self):
+		frappe.db.set_value("Wiki Space", self.public, "is_published", 0)
+		frappe.clear_document_cache("Wiki Space", self.public)
+		self.assertFalse(can_read_space(self.public, "Guest"))
+		self.assertNotIn(self.public, _accessible_space_names("Guest"))
+
 	def test_restricted_space_not_readable_by_guest(self):
 		self.assertFalse(can_read_space(self.restricted, "Guest"))
 
@@ -203,6 +209,36 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 		self.assertIn(self.open_space, names)
 		self.assertIn(self.public, names)
 
+	def test_guest_document_list_excludes_unpublished_and_orphan_documents(self):
+		root_group = frappe.db.get_value("Wiki Space", self.public, "root_group")
+		documents = []
+		for title, wiki_space, is_published in (
+			("Guest published", self.public, 1),
+			("Guest unpublished", self.public, 0),
+			("Guest orphan", None, 1),
+		):
+			document = frappe.get_doc(
+				{
+					"doctype": "Wiki Document",
+					"title": title,
+					"wiki_space": wiki_space,
+					"parent_wiki_document": root_group if wiki_space else None,
+					"is_published": is_published,
+				}
+			).insert(ignore_permissions=True)
+			documents.append(document)
+			self._docs.append(document.name)
+
+		frappe.set_user("Guest")
+		visible = set(
+			frappe.get_list(
+				"Wiki Document",
+				filters={"name": ("in", [document.name for document in documents])},
+				pluck="name",
+			)
+		)
+		self.assertEqual(visible, {documents[0].name})
+
 	# --- has_permission hook entry points -------------------------------
 
 	def test_space_has_permission_read_vs_write(self):
@@ -222,8 +258,22 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 	def test_orphan_document_readable_by_all_writable_by_manager(self):
 		doc = frappe.get_doc({"doctype": "Wiki Document", "title": "Orphan", "wiki_space": None})
 		self.assertTrue(wiki_document_has_permission(doc, "read", self.outsider))
+		self.assertFalse(wiki_document_has_permission(doc, "read", "Guest"))
 		self.assertFalse(wiki_document_has_permission(doc, "write", self.outsider))
 		self.assertTrue(wiki_document_has_permission(doc, "write", self.manager))
+
+	def test_guest_cannot_read_unpublished_document_in_public_space(self):
+		doc = frappe.get_doc(
+			{
+				"doctype": "Wiki Document",
+				"title": "Unpublished public-space document",
+				"wiki_space": self.public,
+				"is_published": 0,
+			}
+		)
+		self.assertFalse(wiki_document_has_permission(doc, "read", "Guest"))
+		doc.is_published = 1
+		self.assertTrue(wiki_document_has_permission(doc, "read", "Guest"))
 
 	def test_cr_has_permission_is_governed_by_space_read(self):
 		doc = frappe.get_doc({"doctype": "Wiki Change Request", "wiki_space": self.restricted})

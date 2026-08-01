@@ -231,3 +231,47 @@ class TestWikiAttachmentPrivacy(IntegrationTestCase):
 
 		self.assertTrue(has_file_permission(wiki_file, "read", user=reader.name))
 		self.assertFalse(has_file_permission(wiki_file, "read", user="Guest"))
+
+	def test_guest_private_file_access_requires_published_document_and_public_space(self):
+		self.space.reload()
+		self.space.is_published = 1
+		self.space.append("roles", {"role": "Guest", "permission_level": "Read"})
+		self.space.save(ignore_permissions=True)
+		wiki_file = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": "public-page-private-asset.txt",
+				"content": b"private storage with explicit public read",
+				"is_private": 1,
+				"attached_to_doctype": "Wiki Document",
+				"attached_to_name": self.document.name,
+			}
+		).insert(ignore_permissions=True)
+
+		self.assertFalse(has_file_permission(wiki_file, "read", user="Guest"))
+		frappe.db.set_value("Wiki Document", self.document.name, "is_published", 1)
+		self.assertTrue(has_file_permission(wiki_file, "read", user="Guest"))
+		frappe.db.set_value("Wiki Space", self.space.name, "is_published", 0)
+		frappe.clear_document_cache("Wiki Space", self.space.name)
+		self.assertFalse(has_file_permission(wiki_file, "read", user="Guest"))
+
+	def test_guest_private_space_asset_requires_public_space(self):
+		self.space.reload()
+		self.space.is_published = 1
+		self.space.append("roles", {"role": "Guest", "permission_level": "Read"})
+		self.space.save(ignore_permissions=True)
+		wiki_file = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": "public-space-private-asset.txt",
+				"content": b"private storage attached to a public Wiki Space",
+				"is_private": 1,
+				"attached_to_doctype": "Wiki Space",
+				"attached_to_name": self.space.name,
+			}
+		).insert(ignore_permissions=True)
+
+		self.assertTrue(has_file_permission(wiki_file, "read", user="Guest"))
+		frappe.db.set_value("Wiki Space", self.space.name, "is_published", 0)
+		frappe.clear_document_cache("Wiki Space", self.space.name)
+		self.assertFalse(has_file_permission(wiki_file, "read", user="Guest"))

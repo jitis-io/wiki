@@ -346,6 +346,10 @@
    "role": "Wiki User",
    "select": 1,
    "share": 1
+  },
+  {
+   "read": 1,
+   "role": "Guest"
   }
  ],
  "row_format": "Dynamic",

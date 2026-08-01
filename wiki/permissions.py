@@ -89,6 +89,9 @@ def can_read_space(space, user=None) -> bool:
 	user = user or frappe.session.user
 	if _is_manager(user):
 		return True
+	name = _resolve_space_name(space)
+	if user == "Guest" and (not name or not frappe.get_cached_value("Wiki Space", name, "is_published")):
+		return False
 
 	levels = _space_role_levels(space)
 	if not levels:
@@ -174,7 +177,18 @@ def _accessible_space_names(user=None) -> set:
 	accessible_restricted = {row.parent for row in rows if row.role in user_roles}
 
 	if user == "Guest":
-		return accessible_restricted
+		published = (
+			set(
+				frappe.get_all(
+					"Wiki Space",
+					filters={"name": ("in", tuple(accessible_restricted)), "is_published": 1},
+					pluck="name",
+				)
+			)
+			if accessible_restricted
+			else set()
+		)
+		return accessible_restricted & published
 
 	all_spaces = set(frappe.get_all("Wiki Space", pluck="name"))
 	open_spaces = all_spaces - restricted_spaces
@@ -226,17 +240,24 @@ def wiki_document_query_conditions(user=None, doctype=None):
 	user = user or frappe.session.user
 	if _is_manager(user):
 		return ""
-	return _space_in_clause("tabWiki Document", user, allow_null=True)
+	space_clause = _space_in_clause("tabWiki Document", user, allow_null=user != "Guest")
+	if user == "Guest":
+		return f"({space_clause}) and `tabWiki Document`.`is_published` = 1"
+	return space_clause
 
 
 def wiki_document_has_permission(doc, ptype, user=None):
 	user = user or frappe.session.user
 	space = doc.wiki_space
 	if not space:
-		# Orphan document: readable by all, writable only by managers.
+		# Orphan documents are never anonymously reachable; authenticated users
+		# may inspect them while only managers may mutate them.
 		if ptype in WRITE_PTYPES:
 			return _is_manager(user)
-		return True
+		return user != "Guest"
+
+	if user == "Guest" and not doc.is_published:
+		return False
 
 	if ptype in WRITE_PTYPES:
 		# A git-synced space is read-only; only the sync engine (running under
