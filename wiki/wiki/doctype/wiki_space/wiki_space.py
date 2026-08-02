@@ -39,6 +39,7 @@ class WikiSpace(Document):
 		is_published: DF.Check
 		light_mode_logo: DF.AttachImage | None
 		navbar_items: DF.Table[TopBarItem]
+		portal_only: DF.Check
 		root_group: DF.Link | None
 		route: DF.Data
 		show_in_switcher: DF.Check

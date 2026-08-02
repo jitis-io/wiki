@@ -102,6 +102,9 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 		self.open_space = _make_space(self, "WSAC Open", [])
 		# A publicly readable space (built-in Guest role on the read list).
 		self.public = _make_space(self, "WSAC Public", [("Guest", "Read")])
+		self.portal_only = _make_space(self, "WSAC Portal Only", [(READER_ROLE, "Read"), ("Guest", "Read")])
+		frappe.db.set_value("Wiki Space", self.portal_only, "portal_only", 1)
+		frappe.clear_document_cache("Wiki Space", self.portal_only)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -152,6 +155,13 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 	def test_restricted_space_not_readable_by_guest(self):
 		self.assertFalse(can_read_space(self.restricted, "Guest"))
 
+	def test_portal_only_space_is_manager_only_even_with_matching_roles(self):
+		self.assertTrue(can_read_space(self.portal_only, self.manager))
+		self.assertTrue(can_write_space(self.portal_only, self.manager))
+		self.assertFalse(can_read_space(self.portal_only, self.reader))
+		self.assertFalse(can_write_space(self.portal_only, self.writer))
+		self.assertFalse(can_read_space(self.portal_only, "Guest"))
+
 	# --- can_write_space -------------------------------------------------
 
 	def test_manager_writes_any_space(self):
@@ -176,6 +186,7 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 		names = _accessible_space_names(self.reader)
 		self.assertIn(self.restricted, names)
 		self.assertIn(self.open_space, names)
+		self.assertNotIn(self.portal_only, names)
 
 	def test_accessible_spaces_excludes_restricted_for_outsider(self):
 		names = _accessible_space_names(self.outsider)
@@ -186,6 +197,7 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 		names = _accessible_space_names("Guest")
 		self.assertIn(self.public, names)
 		self.assertNotIn(self.open_space, names)
+		self.assertNotIn(self.portal_only, names)
 		self.assertNotIn(self.restricted, names)
 
 	# --- query-condition filtering via get_list -------------------------

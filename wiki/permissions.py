@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Frappe and contributors
 # For license information, please see license.txt
 
-"""Role-based access control for Wiki Spaces.
+"""Access control for Wiki Spaces.
 
 Read access  -> view a space + its pages and raise Change Requests.
 Write access -> additionally merge Change Requests. Write implies Read.
@@ -9,7 +9,9 @@ Write access -> additionally merge Change Requests. Write implies Read.
 A space with no role rows is open to all logged-in users (backward compatible).
 A space whose Read list contains the built-in ``Guest`` role is publicly readable
 (``frappe.get_roles()`` returns ``Guest`` for anonymous requests). ``System Manager``
-and ``Wiki Manager`` always have full access.
+and ``Wiki Manager`` always have full access. A ``portal_only`` space denies every
+other native Wiki/REST caller; a trusted integration must enforce tenant access
+before reading it through its own narrowly scoped API.
 """
 
 import frappe
@@ -62,6 +64,16 @@ def _resolve_space_name(space):
 	return space.name
 
 
+def is_portal_only_space(space) -> bool:
+	"""Whether native Wiki access is blocked for a portal-managed space."""
+	name = _resolve_space_name(space)
+	if not name:
+		return False
+	if not isinstance(space, str) and hasattr(space, "portal_only"):
+		return bool(space.portal_only)
+	return bool(frappe.get_cached_value("Wiki Space", name, "portal_only"))
+
+
 def _space_role_levels(space) -> dict:
 	"""Return ``{role: permission_level}`` for a space. Empty dict means open access.
 
@@ -89,6 +101,8 @@ def can_read_space(space, user=None) -> bool:
 	user = user or frappe.session.user
 	if _is_manager(user):
 		return True
+	if is_portal_only_space(space):
+		return False
 	name = _resolve_space_name(space)
 	if user == "Guest" and (not name or not frappe.get_cached_value("Wiki Space", name, "is_published")):
 		return False
@@ -107,6 +121,8 @@ def can_write_space(space, user=None) -> bool:
 	user = user or frappe.session.user
 	if _is_manager(user):
 		return True
+	if is_portal_only_space(space):
+		return False
 
 	levels = _space_role_levels(space)
 	if not levels:
@@ -166,7 +182,10 @@ def _accessible_space_names(user=None) -> set:
 	"""Spaces a user may read: open spaces (no role rows) plus restricted spaces
 	with a role row whose role the user holds. Guests get only the latter."""
 	user = user or frappe.session.user
+	if _is_manager(user):
+		return set(frappe.get_all("Wiki Space", pluck="name"))
 	user_roles = set(frappe.get_roles(user))
+	portal_only_spaces = set(frappe.get_all("Wiki Space", filters={"portal_only": 1}, pluck="name"))
 
 	rows = frappe.get_all(
 		"Wiki Space Role",
@@ -174,7 +193,9 @@ def _accessible_space_names(user=None) -> set:
 		fields=["parent", "role"],
 	)
 	restricted_spaces = {row.parent for row in rows}
-	accessible_restricted = {row.parent for row in rows if row.role in user_roles}
+	accessible_restricted = {
+		row.parent for row in rows if row.role in user_roles and row.parent not in portal_only_spaces
+	}
 
 	if user == "Guest":
 		published = (
@@ -190,7 +211,7 @@ def _accessible_space_names(user=None) -> set:
 		)
 		return accessible_restricted & published
 
-	all_spaces = set(frappe.get_all("Wiki Space", pluck="name"))
+	all_spaces = set(frappe.get_all("Wiki Space", filters={"portal_only": 0}, pluck="name"))
 	open_spaces = all_spaces - restricted_spaces
 	return open_spaces | accessible_restricted
 

@@ -28,6 +28,7 @@
   "navbar_items",
   "access_control_tab",
   "access_control_section",
+  "portal_only",
   "roles",
   "contributions_section",
   "allow_contributions",
@@ -131,7 +132,15 @@
   {
    "fieldname": "access_control_section",
    "fieldtype": "Section Break",
-   "description": "Leave empty for open access to all logged-in users. Add the <b>Guest</b> role for public/anonymous access."
+   "description": "Portal-only spaces are available exclusively through a trusted integration API. Otherwise, leave roles empty for all logged-in users or add <b>Guest</b for public access."
+  },
+  {
+   "default": "0",
+   "description": "Deny native Wiki and REST access to everyone except Wiki/System Managers. Trusted portal integrations may enforce their own tenant authorization before reading the space.",
+   "fieldname": "portal_only",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Portal Only"
   },
   {
    "fieldname": "roles",
