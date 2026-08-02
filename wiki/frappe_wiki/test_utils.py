@@ -1,7 +1,9 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from wiki.utils import lucide_svg
+from wiki.utils import check_app_permission, lucide_svg
 
 
 class TestLucideSvg(FrappeTestCase):
@@ -36,3 +38,19 @@ class TestLucideSvg(FrappeTestCase):
 			utils._lucide_table.cache_clear()
 		self.assertIn("<svg", svg)
 		self.assertIn("<line", svg)
+
+
+class TestAppVisibility(FrappeTestCase):
+	def test_wiki_user_can_see_app_icon(self):
+		with (
+			patch.dict(frappe.session, {"user": "wiki-user@example.com"}),
+			patch("wiki.utils.frappe.get_roles", return_value=["Wiki User"]),
+		):
+			self.assertTrue(check_app_permission())
+
+	def test_user_without_wiki_role_cannot_see_app_icon(self):
+		with (
+			patch.dict(frappe.session, {"user": "employee@example.com"}),
+			patch("wiki.utils.frappe.get_roles", return_value=["Employee"]),
+		):
+			self.assertFalse(check_app_permission())

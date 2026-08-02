@@ -18,6 +18,12 @@
 	"roles": [
 		{
 			"role": "Wiki Manager"
+		},
+		{
+			"role": "Wiki User"
+		},
+		{
+			"role": "System Manager"
 		}
 	],
 	"sidebar": "",

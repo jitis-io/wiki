@@ -87,7 +87,10 @@ jinja = {
 # before_install = "wiki.install.before_install"
 after_install = "wiki.install.after_install"
 
-after_migrate = ["wiki.privacy.ensure_wiki_attachments_private"]
+after_migrate = [
+	"wiki.privacy.ensure_wiki_attachments_private",
+	"wiki.desktop.ensure_wiki_desktop_visibility",
+]
 
 # Desk Notifications
 # ------------------

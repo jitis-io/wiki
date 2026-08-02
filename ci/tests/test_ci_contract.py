@@ -52,7 +52,8 @@ class CiContractTests(unittest.TestCase):
 				encoding="utf-8"
 			)
 		)
-		self.assertIn('after_migrate = ["wiki.privacy.ensure_wiki_attachments_private"]', hooks)
+		self.assertIn('"wiki.privacy.ensure_wiki_attachments_private"', hooks)
+		self.assertIn('"wiki.desktop.ensure_wiki_desktop_visibility"', hooks)
 		self.assertIn('"File": {', hooks)
 		self.assertIn("wiki.patches.v3.ensure_private_attachments", patches)
 		self.assertEqual(doctype["make_attachments_public"], 0)

@@ -78,11 +78,8 @@ def check_app_permission():
 	if frappe.session.user == "Administrator":
 		return True
 
-	roles = frappe.get_roles()
-	if "Wiki Manager" in roles:
-		return True
-
-	return False
+	roles = set(frappe.get_roles())
+	return bool(roles & {"System Manager", "Wiki Manager", "Wiki User"})
 
 
 def add_wiki_user_role(doc, event=None):
