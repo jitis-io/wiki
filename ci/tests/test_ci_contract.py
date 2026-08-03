@@ -58,6 +58,21 @@ class CiContractTests(unittest.TestCase):
 		self.assertIn("wiki.patches.v3.ensure_private_attachments", patches)
 		self.assertEqual(doctype["make_attachments_public"], 0)
 
+	def test_editor_uploads_are_private_and_owned_by_the_wiki_space(self):
+		editor = (ROOT / "frontend" / "src" / "components" / "WikiEditor.vue").read_text(encoding="utf-8")
+		published_panel = (ROOT / "frontend" / "src" / "components" / "WikiDocumentPanel.vue").read_text(
+			encoding="utf-8"
+		)
+		draft_panel = (ROOT / "frontend" / "src" / "components" / "DraftContributionPanel.vue").read_text(
+			encoding="utf-8"
+		)
+
+		self.assertIn("private: true", editor)
+		self.assertIn("doctype: 'Wiki Space'", editor)
+		self.assertIn("docname: props.spaceId", editor)
+		self.assertIn(':space-id="props.spaceId"', published_panel)
+		self.assertIn(':space-id="props.spaceId"', draft_panel)
+
 	def test_container_versions_and_job_isolation_are_fixed(self):
 		dockerfile = (ROOT / "ci" / "Dockerfile").read_text(encoding="utf-8")
 		compose = (ROOT / "ci" / "compose.yaml").read_text(encoding="utf-8")

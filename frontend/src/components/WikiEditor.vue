@@ -101,6 +101,10 @@ const props = defineProps({
 		type: String,
 		default: null,
 	},
+	spaceId: {
+		type: String,
+		default: null,
+	},
 	// The canonical content the parent has confirmed as saved. The editor
 	// normalizes this with its configured Markdown manager before handing
 	// both snapshots to the store for comparison.
@@ -139,10 +143,20 @@ let linkPopupApp = null;
  * Upload file to Frappe and return the file URL
  */
 async function uploadFile(file) {
+	if (!props.spaceId) {
+		const error = new Error('No wiki space configured for this upload');
+		toast.error(error.message);
+		throw error;
+	}
 	try {
 		const isImage = file.type.includes('image');
 		const result = await fileUploader.upload(file, {
-			private: false,
+			// Draft pages do not have a Wiki Document yet. Attach their files to
+			// the owning space so the privacy hook isolates them immediately and
+			// the tenant-checked portal asset endpoint can authorize them after merge.
+			private: true,
+			doctype: 'Wiki Space',
+			docname: props.spaceId,
 			// Hit our handler directly (not via upload_file's `method` delegation,
 			// which would recurse). It converts PNG/JPEG to WebP when the Wiki
 			// Setting is enabled, returning the optimized file_url.
@@ -800,4 +814,3 @@ onUnmounted(() => {
 	delete window.wikiEditor;
 });
 </script>
-
