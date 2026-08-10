@@ -76,13 +76,14 @@ class CiContractTests(unittest.TestCase):
 	def test_container_versions_and_job_isolation_are_fixed(self):
 		dockerfile = (ROOT / "ci" / "Dockerfile").read_text(encoding="utf-8")
 		compose = (ROOT / "ci" / "compose.yaml").read_text(encoding="utf-8")
-		pipeline = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+		pipeline = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 		self.assertIn("FROM node:24-bookworm-slim AS node", dockerfile)
 		self.assertIn("FROM python:3.14-slim-bookworm AS runtime", dockerfile)
 		self.assertIn("frappe-bench==5.31.0 ruff==0.8.1", dockerfile)
 		self.assertIn("image: mariadb:11.8", compose)
 		self.assertNotIn(":latest", "\n".join((dockerfile, compose, pipeline)))
-		self.assertIn('COMPOSE_PROJECT_NAME: "wiki_${CI_PIPELINE_ID}_${CI_JOB_ID}"', pipeline)
+		self.assertIn("COMPOSE_PROJECT_NAME: wiki_${{ github.run_id }}_quality", pipeline)
+		self.assertIn("COMPOSE_PROJECT_NAME: wiki_${{ github.run_id }}_integration", pipeline)
 		self.assertEqual(pipeline.count("down --volumes --remove-orphans"), 2)
 
 

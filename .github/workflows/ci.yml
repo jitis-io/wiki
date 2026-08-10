@@ -1,118 +1,49 @@
-
-name: CI
+name: JITIS fork CI
 
 on:
+  pull_request:
   push:
     branches:
-      - develop
-      - main
-      - version-3
-    paths-ignore:
-      - '**.js'
-      - '**.vue'
-      - '**.css'
-      - '**.ts'
-  pull_request:
-    paths-ignore:
-      - '**.js'
-      - '**.vue'
-      - '**.css'
-      - '**.ts'
+      - jitis-v3
+    tags:
+      - "3.0.0+jitis.*"
 
 concurrency:
-  group: develop-wiki-${{ github.event.number }}
+  group: wiki-ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  tests:
+  quality:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-    name: Server
-
-    services:
-      redis-cache:
-        image: redis:alpine
-        ports:
-          - 13000:6379
-      redis-queue:
-        image: redis:alpine
-        ports:
-          - 11000:6379
-      mariadb:
-        image: mariadb:10.6
-        env:
-          MYSQL_ROOT_PASSWORD: root
-        ports:
-          - 3306:3306
-        options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
-
+    timeout-minutes: 20
+    env:
+      COMPOSE_PROJECT_NAME: wiki_${{ github.run_id }}_quality
     steps:
-      - name: Clone
-        uses: actions/checkout@v3
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: Find tests
-        run: |
-          echo "Finding tests"
-          grep -rn "def test" > /dev/null
+      - name: Run quality checks
+        run: docker compose -f ci/compose.yaml run --build --rm quality
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.14'
+      - name: Remove disposable resources
+        if: always()
+        run: docker compose -f ci/compose.yaml down --volumes --remove-orphans
 
-      - name: Setup Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 24
-          check-latest: true
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      COMPOSE_PROJECT_NAME: wiki_${{ github.run_id }}_integration
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-            ${{ runner.os }}-
+      - name: Run disposable Frappe integration tests
+        run: docker compose -f ci/compose.yaml run --build --rm integration
 
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: 'echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT'
-
-      - uses: actions/cache@v4
-        id: yarn-cache
-        with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-
-      - name: Install MariaDB Client
-        run: sudo apt update && sudo apt-get install mariadb-client
-
-      - name: Setup
-        run: |
-          pip install frappe-bench
-          bench init --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
-          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
-          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
-
-      - name: Install
-        working-directory: /home/runner/frappe-bench
-        run: |
-          bench get-app wiki $GITHUB_WORKSPACE
-          bench setup requirements --dev
-          bench new-site --db-root-password root --admin-password admin test_site
-          bench --site test_site install-app wiki
-          bench build
-        env:
-          CI: 'Yes'
-
-      - name: Run Tests
-        working-directory: /home/runner/frappe-bench
-        run: |
-          bench --site test_site set-config allow_tests true
-          bench --site test_site run-tests --app wiki
-        env:
-          TYPE: server
+      - name: Remove disposable resources
+        if: always()
+        run: docker compose -f ci/compose.yaml down --volumes --remove-orphans

@@ -1,7 +1,7 @@
-# JITIS private Wiki release
+# JITIS Wiki release fork
 
 This repository is the canonical source for the JITIS Wiki privacy changes. A
-consumer must pin one full commit ID from this private GitLab project; it must
+consumer must pin one full commit ID from the public `jitis-io/wiki` fork; it must
 not carry or apply a second copy of the privacy patch.
 
 ## Compatibility contract
@@ -10,7 +10,7 @@ not carry or apply a second copy of the privacy patch.
 - ERPNext `v16.30.0` at `8378b6e203841c056925420cc44e6d631c915cf1`
 - Python 3.14, Node.js 24 and MariaDB 11.8
 
-The GitLab pipeline creates a clean Bench and builds the exact Wiki tree. It
+The GitHub Actions pipeline creates a clean Bench and builds the exact Wiki tree. It
 runs the privacy, permission, and SQLite search compatibility gates on a site
 with ERPNext 16.30 installed, then runs the complete Wiki server suite on a
 second clean Frappe 16.29 site. The two-site split avoids Frappe's legacy test
@@ -19,14 +19,11 @@ this pinned stack. The tests cover private attachment migration, public-file
 cloning, rollback/idempotency, role-controlled private files, anonymous access,
 and the Frappe 16.29 SQLite search API.
 
-## Private downstream consumption
+## Downstream consumption
 
-Same-GitLab CI consumers should clone this repository with their ephemeral
-`CI_JOB_TOKEN`, check out an exact 40-character commit ID, verify `HEAD`, and
-then remove the credential-bearing remote. The Wiki project must explicitly
-allow the consuming project in its CI job-token inbound allowlist. Do not use a
-personal access token, deploy token in source, public mirror, or a duplicated
-patch as a fallback.
+Consumers should clone `https://github.com/jitis-io/wiki.git` without
+credentials, check out an exact 40-character commit ID, and verify `HEAD`.
+Do not duplicate the privacy patch in a downstream repository as a fallback.
 
 Local integration tests may clone a trusted local checkout, but must verify the
 same full commit before installing it.
