@@ -10,6 +10,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { VueNodeViewRenderer } from '@tiptap/vue-3';
 import CalloutBlockView from './CalloutBlockView.vue';
+import { renderCalloutFence } from './callout-markdown.js';
 
 /**
  * Callout types that are supported
@@ -174,14 +175,7 @@ export const CalloutBlock = Node.create({
 	},
 
 	renderMarkdown(node) {
-		const calloutType = node.attrs.type || 'note';
-		const title = node.attrs.title || '';
-		const content = node.attrs.content || '';
-
-		if (title) {
-			return `:::${calloutType}[${title}]\n${content}\n:::\n\n`;
-		}
-		return `:::${calloutType}\n${content}\n:::\n\n`;
+		return renderCalloutFence(node.attrs);
 	},
 });
 
