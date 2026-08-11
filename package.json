@@ -1,7 +1,8 @@
 {
   "name": "wiki",
-  "version": "3.0.0+jitis.4",
+  "version": "3.0.0+jitis.5",
   "private": "true",
+  "packageManager": "yarn@1.22.22",
   "dependencies": {
     "@tailwindcss/cli": "^4.0.14",
     "tailwindcss": "^4.0.14"
