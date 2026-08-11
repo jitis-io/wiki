@@ -1,12 +1,15 @@
 name: JITIS fork CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
       - jitis-v3
     tags:
-      - "3.0.0+jitis.*"
+      # `+` is a glob quantifier in Actions filters; escape it so annotated
+      # SemVer build-metadata tags actually start this release gate.
+      - '3.0.0\+jitis.*'
 
 concurrency:
   group: wiki-ci-${{ github.ref }}
