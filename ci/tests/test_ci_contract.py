@@ -19,7 +19,6 @@ EXPECTED_ACTION_PINS = {
 	"actions/setup-node": ("49933ea5288caeca8642d1e84afbd3f7d6820020", "v4.4.0"),
 	"actions/setup-python": ("a26af69be951a213d495a4c3e4e4022e16d87065", "v5.6.0"),
 	"actions/upload-artifact": ("ea165f8d65b6e75b540449e92b4886f43607fa02", "v4.6.2"),
-	"pre-commit/action": ("2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd", "v3.0.1"),
 }
 
 
