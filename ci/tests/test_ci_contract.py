@@ -10,6 +10,8 @@ EXPECTED_COMMITS = {
 	"ERPNEXT_COMMIT": "8378b6e203841c056925420cc44e6d631c915cf1",
 }
 
+EXPECTED_WIKI_VERSION = "3.0.0+jitis.7"
+
 EXPECTED_ACTION_PINS = {
 	"actions/cache": ("0057852bfaa89a56745cba8c7296529d2fc39830", "v4.3.0"),
 	"actions/checkout": ("11d5960a326750d5838078e36cf38b85af677262", "v4.4.0"),
@@ -30,6 +32,17 @@ class CiContractTests(unittest.TestCase):
 			re.findall(r'^readonly ([A-Z]+_COMMIT)="([0-9a-f]{40})"$', self.integration, re.MULTILINE)
 		)
 		self.assertEqual(found, EXPECTED_COMMITS)
+
+	def test_python_and_package_versions_match_release(self):
+		python_version = re.fullmatch(
+			r'__version__ = "([^"]+)"\n?',
+			(ROOT / "wiki" / "__init__.py").read_text(encoding="utf-8"),
+		)
+		package_version = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
+
+		self.assertIsNotNone(python_version)
+		self.assertEqual(python_version.group(1), EXPECTED_WIKI_VERSION)
+		self.assertEqual(package_version, EXPECTED_WIKI_VERSION)
 
 	def test_release_tags_and_resolved_commits_are_verified(self):
 		self.assertIn("--frappe-branch v16.29.0", self.integration)
