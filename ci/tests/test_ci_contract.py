@@ -10,6 +10,16 @@ EXPECTED_COMMITS = {
 	"ERPNEXT_COMMIT": "8378b6e203841c056925420cc44e6d631c915cf1",
 }
 
+EXPECTED_ACTION_PINS = {
+	"actions/cache": ("0057852bfaa89a56745cba8c7296529d2fc39830", "v4.3.0"),
+	"actions/checkout": ("11d5960a326750d5838078e36cf38b85af677262", "v4.4.0"),
+	"actions/download-artifact": ("d3f86a106a0bac45b974a628896c90dbdf5c8093", "v4.3.0"),
+	"actions/setup-node": ("49933ea5288caeca8642d1e84afbd3f7d6820020", "v4.4.0"),
+	"actions/setup-python": ("a26af69be951a213d495a4c3e4e4022e16d87065", "v5.6.0"),
+	"actions/upload-artifact": ("ea165f8d65b6e75b540449e92b4886f43607fa02", "v4.6.2"),
+	"pre-commit/action": ("2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd", "v3.0.1"),
+}
+
 
 class CiContractTests(unittest.TestCase):
 	def setUp(self):
@@ -85,6 +95,31 @@ class CiContractTests(unittest.TestCase):
 		self.assertIn("COMPOSE_PROJECT_NAME: wiki_${{ github.run_id }}_quality", pipeline)
 		self.assertIn("COMPOSE_PROJECT_NAME: wiki_${{ github.run_id }}_integration", pipeline)
 		self.assertEqual(pipeline.count("down --volumes --remove-orphans"), 2)
+
+	def test_upstream_workflow_actions_are_immutable_release_pins(self):
+		workflow_paths = (
+			ROOT / ".github" / "workflows" / "ui-tests.yml",
+			ROOT / ".github" / "workflows" / "linters.yml",
+		)
+		pinned_action = re.compile(
+			r"^\s*-?\s*uses:\s+(actions/[\w-]+|pre-commit/action)@([0-9a-f]{40})"
+			r"\s+#\s+(v\d+\.\d+\.\d+)\s*$"
+		)
+		uses_lines = [
+			line
+			for path in workflow_paths
+			for line in path.read_text(encoding="utf-8").splitlines()
+			if "uses:" in line
+		]
+
+		self.assertTrue(uses_lines)
+		self.assertEqual([line for line in uses_lines if not pinned_action.match(line)], [])
+		resolved_pins = {
+			match.group(1): (match.group(2), match.group(3))
+			for line in uses_lines
+			if (match := pinned_action.match(line))
+		}
+		self.assertEqual(resolved_pins, EXPECTED_ACTION_PINS)
 
 
 if __name__ == "__main__":
