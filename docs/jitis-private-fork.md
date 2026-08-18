@@ -1,29 +1,31 @@
 # JITIS Wiki release fork
 
-This repository is the canonical source for the JITIS Wiki privacy changes. A
-consumer must pin one full commit ID from the public `jitis-io/wiki` fork; it must
-not carry or apply a second copy of the privacy patch.
+This repository is the canonical source for the JITIS Wiki privacy changes. The
+ERP platform consumes a reviewed release tag from the public `jitis-io/wiki`
+fork; it must not carry or apply a second copy of the privacy patch.
 
-## Compatibility contract
+## Production compatibility contract
 
-- Frappe `v16.29.0` at `06613fc60b44d5736007ae3107cdab029b2ae045`
-- ERPNext `v16.30.0` at `8378b6e203841c056925420cc44e6d631c915cf1`
+- Frappe `v16.31.0` at `6a329d068416768ec47ccd3326b9cc95a8d7bf99`
+- ERPNext `v16.32.1` at `21d187302045476f1ceb5d0d86219389ab1e75b8`
+- Wiki `3.0.0+jitis.7` at `31d632baf22039c0b07dfb08e9a8377604b1caf8`
 - Python 3.14, Node.js 24 and MariaDB 11.8
 
-The GitHub Actions pipeline creates a clean Bench and builds the exact Wiki tree. It
-runs the privacy, permission, and SQLite search compatibility gates on a site
-with ERPNext 16.30 installed, then runs the complete Wiki server suite on a
-second clean Frappe 16.29 site. The two-site split avoids Frappe's legacy test
-record loader traversing optional ERPNext applications that are not part of
-this pinned stack. The tests cover private attachment migration, public-file
-cloning, rollback/idempotency, role-controlled private files, anonymous access,
-and the Frappe 16.29 SQLite search API.
+The Wiki fork pipeline creates clean Frappe v16 benches and runs the privacy,
+permission, search-compatibility, and complete Wiki server suites. The exact
+production combination above is additionally installed and tested by the
+`jitis-platform-integration` clean-bench integration pipeline. The tests cover
+private attachment migration, public-file cloning, rollback/idempotency,
+role-controlled private files, anonymous access, and the SQLite search API.
 
 ## Downstream consumption
 
-Consumers should clone `https://github.com/jitis-io/wiki.git` without
-credentials, check out an exact 40-character commit ID, and verify `HEAD`.
-Do not duplicate the privacy patch in a downstream repository as a fallback.
+The ERP platform stores an exact semantic release tag in
+`deploy/jitis/erpnext/app-lock.json`. Its `ci/pin-app-release.sh` helper verifies
+that the remote tag resolves to one commit and that the app declares the same
+version before updating the lock. The image builder fetches that exact tag, and
+the resulting production image is promoted by immutable container digest.
 
-Local integration tests may clone a trusted local checkout, but must verify the
-same full commit before installing it.
+Integration tests may pin the resolved 40-character commit directly and must
+verify `HEAD` before installation. Consumers must not use a branch or duplicate
+the privacy patch in a downstream repository as a fallback.
