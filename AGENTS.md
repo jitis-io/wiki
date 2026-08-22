@@ -17,3 +17,12 @@ docker compose -f ci/compose.yaml down --volumes --remove-orphans
 ```
 
 Require negative cross-customer tests for document, attachment, search, and navigation changes. Treat any unauthorized document or attachment disclosure as P0.
+
+## Code Review Rules
+
+- Treat any unauthorized document, attachment, search result, or navigation
+  disclosure across customers as P0.
+- Treat a change that duplicates or bypasses the shared portal authorization
+  boundary as P1; require a negative cross-customer regression test.
+- Keep the private fork diff minimal and compatible with the pinned upstream
+  release; flag unrelated vendoring or mutable production references.
