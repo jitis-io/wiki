@@ -10,7 +10,7 @@ EXPECTED_COMMITS = {
 	"ERPNEXT_COMMIT": "8378b6e203841c056925420cc44e6d631c915cf1",
 }
 
-EXPECTED_WIKI_VERSION = "3.0.0+jitis.7"
+EXPECTED_WIKI_VERSION = "3.0.0+jitis.8"
 
 EXPECTED_ACTION_PINS = {
 	"actions/cache": ("0057852bfaa89a56745cba8c7296529d2fc39830", "v4.3.0"),
@@ -58,6 +58,7 @@ class CiContractTests(unittest.TestCase):
 			"build --app wiki",
 			"run-tests --app wiki --module wiki.test_privacy",
 			"run-tests --app wiki --module wiki.test_permissions",
+			"run-tests --app wiki --module wiki.test_read_protection",
 			"run-tests --app wiki --module wiki.test_search_compatibility",
 			'"$WIKI_ONLY_SITE_NAME"',
 			"run-tests --app wiki\n",

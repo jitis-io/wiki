@@ -68,6 +68,7 @@ bench build --app wiki
 bench --site "$SITE_NAME" set-config allow_tests true
 bench --site "$SITE_NAME" run-tests --app wiki --module wiki.test_privacy
 bench --site "$SITE_NAME" run-tests --app wiki --module wiki.test_permissions
+bench --site "$SITE_NAME" run-tests --app wiki --module wiki.test_read_protection
 bench --site "$SITE_NAME" run-tests --app wiki --module wiki.test_search_compatibility
 
 # Frappe's v16 test-record compatibility loader traverses every installed

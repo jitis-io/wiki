@@ -44,38 +44,33 @@ def _filter_hits_by_space_visibility(hits: list[dict]) -> list[dict]:
 	"""Drop search hits the current user couldn't open as a page.
 
 	The SQLite index is built without user context, so titles/snippets from
-	restricted spaces can surface here. Resolve each hit's denormalized
-	wiki_space and gate it through the same checks as page rendering: the
-	space must be published (`check_published`) and readable by the current
-	user (`check_space_access`). Orphan documents (no wiki_space) stay
-	readable by all.
+	restricted spaces can surface here. Every hit is revalidated against the
+	current database row and the central document/space permission helper.
+	Deleted, unpublished, grouped, external, orphaned or inconsistently scoped
+	rows are dropped, even when their old index entry still exists.
 	"""
-	from wiki.permissions import can_read_space
+	from wiki.permissions import can_read_document
 
-	names = [hit["name"] for hit in hits]
+	names = [hit.get("name") for hit in hits if hit.get("name")]
 	if not names:
-		return hits
+		return []
 
-	space_by_name = {
-		row.name: row.wiki_space
+	documents = {
+		row.name: row
 		for row in frappe.get_all(
 			"Wiki Document",
 			filters={"name": ("in", names)},
-			fields=["name", "wiki_space"],
+			fields=["name", "wiki_space", "is_published", "is_group", "is_external_link"],
 		)
 	}
 
-	visible: dict[str, bool] = {}
-
-	def _is_visible(space_name: str) -> bool:
-		if space_name not in visible:
-			space_published = frappe.get_cached_value("Wiki Space", space_name, "is_published")
-			visible[space_name] = bool(space_published) and can_read_space(space_name)
-		return visible[space_name]
-
 	allowed = []
 	for hit in hits:
-		hit_space = space_by_name.get(hit["name"])
-		if not hit_space or _is_visible(hit_space):
+		document = documents.get(hit.get("name"))
+		if not document:
+			continue
+		if not document.is_published or document.is_group or document.is_external_link:
+			continue
+		if can_read_document(document, require_published=True):
 			allowed.append(hit)
 	return allowed

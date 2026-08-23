@@ -273,10 +273,7 @@ class TestGetWebContext(WikiDocumentTestBase):
 		self.assertGreaterEqual(len(switcher_spaces), 2)
 
 	def test_orphan_document_without_wiki_space(self):
-		"""
-		Test that get_web_context handles a document that is not associated
-		with any Wiki Space (no parent, standalone published document).
-		"""
+		"""Published orphan documents must not be rendered without a scope."""
 		# Create a standalone document with no parent and no wiki space
 		orphan_doc = create_test_wiki_document(
 			self,
@@ -286,26 +283,9 @@ class TestGetWebContext(WikiDocumentTestBase):
 			is_published=True,
 		)
 
-		# Get context for the orphan document
 		orphan_doc.reload()
-		context = orphan_doc.get_web_context()
-
-		# The document should still return a valid context
-		# Even without a wiki space, these should be handled gracefully
-		self.assertIsNone(context.get("prev_doc"))
-		self.assertIsNone(context.get("next_doc"))
-		self.assertIsNone(context.get("wiki_space"))
-		self.assertEqual(context.get("wiki_spaces_for_switcher"), [])
-		self.assertEqual(context.get("navbar_items"), [])
-		self.assertEqual(context.get("nested_tree"), [])
-		self.assertIsNone(context.get("favicon"))
-
-		# hide_chrome should be True to hide sidebar, search, navbar
-		self.assertTrue(context.get("hide_chrome"))
-
-		# Content should still be rendered
-		self.assertIsNotNone(context.get("rendered_content"))
-		self.assertEqual(context.get("title"), "Orphan Published Document")
+		with self.assertRaises(frappe.DoesNotExistError):
+			orphan_doc.get_web_context()
 
 	def test_get_web_context_renders_video_markdown_as_html_video_block(self):
 		"""Video markdown should render as HTML5 video in public page context."""

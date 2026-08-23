@@ -361,15 +361,14 @@ class WikiDocument(NestedSet):
 		so we don't leak the existence of restricted pages to unauthorized users
 		(especially anonymous Guests).
 		"""
-		from wiki.permissions import can_read_space, can_write_space
+		from wiki.permissions import assert_can_read_document, can_write_space, resolve_document_space
 
-		space = self.wiki_space or (self.get_wiki_space() or {}).get("name")
-		if not space:
-			# Orphan documents stay readable by all (preserves chromeless pages).
+		if ptype != "write":
+			assert_can_read_document(self, user)
 			return
 
-		allowed = can_write_space(space, user) if ptype == "write" else can_read_space(space, user)
-		if not allowed:
+		space = resolve_document_space(self)
+		if not space or not can_write_space(space, user):
 			frappe.throw(_("Page not found"), frappe.DoesNotExistError)
 
 	def check_guest_access(self):
@@ -412,6 +411,7 @@ class WikiDocument(NestedSet):
 	@frappe.whitelist()
 	def get_breadcrumbs(self) -> dict:
 		"""Get the breadcrumb trail for this Wiki Document including space info."""
+		self.check_space_access("read")
 		ancestors = self.get_ancestors()
 
 		# Build breadcrumb items from ancestors (excluding root)
@@ -516,13 +516,13 @@ class WikiDocument(NestedSet):
 
 		wiki_space_doc = frappe.get_cached_doc("Wiki Space", wiki_space.name)
 		nested_tree, adjacent_docs = self.get_tree_and_navigation()
+		from wiki.permissions import get_readable_spaces
 
 		context.update(
 			{
 				"wiki_space": wiki_space_doc,
 				"can_edit": self._can_show_edit(wiki_space_doc),
-				"wiki_spaces_for_switcher": frappe.get_all(
-					"Wiki Space",
+				"wiki_spaces_for_switcher": get_readable_spaces(
 					fields=["name", "space_name", "route", "light_mode_logo", "app_switcher_logo"],
 					or_filters={"show_in_switcher": 1, "name": wiki_space["name"]},
 					order_by="switcher_order asc, space_name asc",
@@ -1155,10 +1155,14 @@ def stamp_wiki_space_subtree(root_doc_name):
 
 def on_wiki_document_trash(doc, method):
 	"""Sync desk deletions to the revision system."""
+	from wiki.frappe_wiki.doctype.wiki_document.wiki_sqlite_search import remove_doc_from_index
+
 	_sync_document_to_revision(doc)
 	_clear_stale_website_cache(doc, deleted=True)
 	clear_wiki_tree_cache()
 	clear_wiki_content_cache(doc.name)
+	docname = doc.name
+	frappe.db.after_commit.add(lambda: remove_doc_from_index(docname))
 	_drop_generated_og_cards(doc)
 
 

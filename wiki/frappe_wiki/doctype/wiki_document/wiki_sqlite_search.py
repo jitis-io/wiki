@@ -34,9 +34,19 @@ class WikiSQLiteSearch(SQLiteSearch):
 
 	def prepare_document(self, doc):
 		"""Override to compute space and strip markdown from content"""
+		if doc.get("doctype") == "Wiki Document":
+			from wiki.permissions import resolve_document_space
+
+			space_name = resolve_document_space(doc)
+			if not space_name:
+				return None
+			root_group = frappe.get_cached_value("Wiki Space", space_name, "root_group")
+			if not root_group:
+				return None
+
 		prepared = super().prepare_document(doc)
 		if prepared and doc.get("doctype") == "Wiki Document":
-			prepared["space"] = self._get_root_space(doc.get("name"))
+			prepared["space"] = root_group
 			if prepared.get("content"):
 				prepared["content"] = self._strip_markdown(prepared["content"])
 		return prepared
@@ -85,8 +95,12 @@ class WikiSQLiteSearch(SQLiteSearch):
 
 	def _get_root_space(self, docname):
 		"""Get the root wiki space for a document"""
-		wiki_doc = frappe.get_doc("Wiki Document", docname)
-		return wiki_doc.get_root_group() or docname
+		from wiki.permissions import resolve_document_space
+
+		space_name = resolve_document_space(docname)
+		if not space_name:
+			return None
+		return frappe.get_cached_value("Wiki Space", space_name, "root_group")
 
 
 def enqueue_reindex(docnames: list[str]):

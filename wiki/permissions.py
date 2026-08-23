@@ -64,6 +64,92 @@ def _resolve_space_name(space):
 	return space.name
 
 
+def _raise_not_found() -> None:
+	"""Hide whether a denied or ambiguously scoped object exists."""
+	frappe.throw(_("Page not found"), frappe.DoesNotExistError)
+
+
+def assert_can_read_space(space, user=None, *, require_authenticated: bool = False) -> str:
+	"""Return the existing, readable space name or fail without leaking it."""
+	user = user or frappe.session.user
+	name = _resolve_space_name(space)
+	if (require_authenticated and user == "Guest") or not can_read_space(name, user):
+		_raise_not_found()
+	return name
+
+
+def resolve_document_space(document) -> str | None:
+	"""Resolve one authoritative space for a persisted Wiki Document.
+
+	The nested tree is authoritative. The denormalized ``wiki_space`` value may
+	be empty for older, otherwise valid trees, but when present it must agree
+	with the tree. Missing roots, duplicate roots, loops and stale/mismatched
+	space stamps all fail closed.
+	"""
+	name = document if isinstance(document, str) else document.get("name")
+	if not name:
+		return None
+
+	state = frappe.db.get_value(
+		"Wiki Document",
+		name,
+		["wiki_space", "parent_wiki_document"],
+		as_dict=True,
+	)
+	if not state:
+		return None
+
+	current = name
+	visited = set()
+	tree_space = None
+	while current and current not in visited:
+		visited.add(current)
+		owners = frappe.get_all(
+			"Wiki Space",
+			filters={"root_group": current},
+			pluck="name",
+			limit=2,
+		)
+		if owners:
+			if len(owners) != 1:
+				return None
+			tree_space = owners[0]
+			break
+		current = frappe.db.get_value("Wiki Document", current, "parent_wiki_document")
+
+	if not tree_space:
+		return None
+	if state.wiki_space and state.wiki_space != tree_space:
+		return None
+	return tree_space
+
+
+def can_read_document(document, user=None, *, require_published: bool = False) -> bool:
+	"""Whether a current, unambiguously scoped document may be read."""
+	user = user or frappe.session.user
+	name = document if isinstance(document, str) else document.get("name")
+	space = resolve_document_space(document)
+	if not name or not space:
+		return False
+
+	if require_published or user == "Guest":
+		if not frappe.db.get_value("Wiki Document", name, "is_published"):
+			return False
+	return can_read_space(space, user)
+
+
+def assert_can_read_document(
+	document,
+	user=None,
+	*,
+	require_published: bool = False,
+) -> str:
+	"""Return the owning space or raise a non-disclosing 404."""
+	if not can_read_document(document, user, require_published=require_published):
+		_raise_not_found()
+	return resolve_document_space(document)
+
+
 def is_portal_only_space(space) -> bool:
 	"""Whether native Wiki access is blocked for a portal-managed space."""
 	name = _resolve_space_name(space)
@@ -99,12 +185,14 @@ def _space_role_levels(space) -> dict:
 
 def can_read_space(space, user=None) -> bool:
 	user = user or frappe.session.user
+	name = _resolve_space_name(space)
+	if not name or not frappe.db.exists("Wiki Space", name):
+		return False
 	if _is_manager(user):
 		return True
 	if is_portal_only_space(space):
 		return False
-	name = _resolve_space_name(space)
-	if user == "Guest" and (not name or not frappe.get_cached_value("Wiki Space", name, "is_published")):
+	if user == "Guest" and not frappe.get_cached_value("Wiki Space", name, "is_published"):
 		return False
 
 	levels = _space_role_levels(space)
@@ -216,6 +304,34 @@ def _accessible_space_names(user=None) -> set:
 	return open_spaces | accessible_restricted
 
 
+def get_readable_spaces(
+	*,
+	user=None,
+	fields: list[str] | None = None,
+	pluck: str | None = None,
+	filters: dict | None = None,
+	or_filters: dict | list | None = None,
+	order_by: str | None = None,
+) -> list:
+	"""Fetch only spaces present in the central read-access set."""
+	names = _accessible_space_names(user)
+	if not names:
+		return []
+
+	query_filters = dict(filters or {})
+	query_filters["name"] = ("in", tuple(names))
+	kwargs = {"filters": query_filters, "limit": 0}
+	if fields:
+		kwargs["fields"] = fields
+	if pluck:
+		kwargs["pluck"] = pluck
+	if or_filters:
+		kwargs["or_filters"] = or_filters
+	if order_by:
+		kwargs["order_by"] = order_by
+	return frappe.get_all("Wiki Space", **kwargs)
+
+
 def _space_in_clause(table: str, user: str, allow_null: bool) -> str:
 	"""Build a WHERE fragment restricting ``table`` to spaces the user can read."""
 	names = _accessible_space_names(user)
@@ -231,6 +347,26 @@ def _space_in_clause(table: str, user: str, allow_null: bool) -> str:
 	if len(parts) == 1:
 		return parts[0]
 	return "(" + " or ".join(parts) + ")"
+
+
+def _document_space_integrity_clause(table: str) -> str:
+	"""Require the denormalized space to match the current nested-set tree."""
+	return f"""
+		exists (
+			select 1
+			from `tabWiki Space` `_wiki_scope`
+			inner join `tabWiki Document` `_wiki_root`
+				on `_wiki_root`.`name` = `_wiki_scope`.`root_group`
+			where `_wiki_scope`.`name` = `{table}`.`wiki_space`
+				and (
+					`{table}`.`name` = `_wiki_scope`.`root_group`
+					or (
+						`{table}`.`lft` > `_wiki_root`.`lft`
+						and `{table}`.`rgt` < `_wiki_root`.`rgt`
+					)
+				)
+		)
+	""".strip()
 
 
 # ---------------------------------------------------------------------------
@@ -261,24 +397,25 @@ def wiki_document_query_conditions(user=None, doctype=None):
 	user = user or frappe.session.user
 	if _is_manager(user):
 		return ""
-	space_clause = _space_in_clause("tabWiki Document", user, allow_null=user != "Guest")
+	space_clause = _space_in_clause("tabWiki Document", user, allow_null=False)
+	integrity_clause = _document_space_integrity_clause("tabWiki Document")
 	if user == "Guest":
-		return f"({space_clause}) and `tabWiki Document`.`is_published` = 1"
-	return space_clause
+		return f"({space_clause}) and ({integrity_clause}) and `tabWiki Document`.`is_published` = 1"
+	return f"({space_clause}) and ({integrity_clause})"
 
 
 def wiki_document_has_permission(doc, ptype, user=None):
 	user = user or frappe.session.user
-	space = doc.wiki_space
+	name = doc.get("name")
+	is_new = not (name and frappe.db.exists("Wiki Document", name))
+	if is_new:
+		space = doc.wiki_space
+	else:
+		space = resolve_document_space(doc)
 	if not space:
-		# Orphan documents are never anonymously reachable; authenticated users
-		# may inspect them while only managers may mutate them.
-		if ptype in WRITE_PTYPES:
-			return _is_manager(user)
-		return user != "Guest"
-
-	if user == "Guest" and not doc.is_published:
-		return False
+		# Managers retain Desk access so they can repair orphaned/mismatched rows;
+		# public and API rendering still goes through assert_can_read_document.
+		return _is_manager(user)
 
 	if ptype in WRITE_PTYPES:
 		# A git-synced space is read-only; only the sync engine (running under
@@ -286,23 +423,25 @@ def wiki_document_has_permission(doc, ptype, user=None):
 		if not frappe.flags.in_apply_merge_revision and is_git_synced_space(space):
 			return False
 		return can_write_space(space, user)
-	return can_read_space(space, user)
+	if is_new:
+		if user == "Guest" and not doc.is_published:
+			return False
+		return can_read_space(space, user)
+	return can_read_document(doc, user)
 
 
 def wiki_cr_query_conditions(user=None, doctype=None):
 	user = user or frappe.session.user
 	if _is_manager(user):
 		return ""
-	return _space_in_clause("tabWiki Change Request", user, allow_null=True)
+	return _space_in_clause("tabWiki Change Request", user, allow_null=False)
 
 
 def wiki_cr_has_permission(doc, ptype, user=None):
 	user = user or frappe.session.user
 	space = doc.wiki_space
 	if not space:
-		if ptype in WRITE_PTYPES:
-			return _is_manager(user)
-		return True
+		return _is_manager(user)
 
 	# Reading a CR requires space Read. Editing/saving it (proposing changes)
 	# additionally requires the space to accept contributions (Write-tier users

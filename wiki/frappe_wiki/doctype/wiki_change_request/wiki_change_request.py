@@ -25,6 +25,7 @@ from wiki.frappe_wiki.doctype.wiki_revision.wiki_revision import (
 	mark_hashes_stale,
 	recompute_revision_hashes,
 )
+from wiki.permissions import assert_can_read_space
 
 
 class WikiChangeRequest(Document):
@@ -591,6 +592,7 @@ def _archive_stale_draft(cr: Document) -> None:
 
 @frappe.whitelist()
 def list_change_requests(wiki_space: str, status: str | None = None) -> list[dict[str, Any]]:
+	assert_can_read_space(wiki_space, require_authenticated=True)
 	filters: dict[str, Any] = {"wiki_space": wiki_space}
 	if status:
 		filters["status"] = status
@@ -1212,7 +1214,10 @@ def _sibling_position_map(item_map: dict[str, dict[str, Any]]) -> dict[str, int]
 
 @frappe.whitelist()
 def diff_change_request(name: str, scope: str = "summary", doc_key: str | None = None):
+	wiki_space = frappe.db.get_value("Wiki Change Request", name, "wiki_space")
+	assert_can_read_space(wiki_space, require_authenticated=True)
 	cr = frappe.get_doc("Wiki Change Request", name)
+	cr.check_permission("read")
 	base_items = get_revision_item_map(cr.base_revision)
 	head_items = get_effective_revision_item_map(cr.head_revision)
 	base_contents: dict[str, str] = {}
