@@ -26,4 +26,6 @@ class WikiSettings(Document):
 
 @frappe.whitelist()
 def get_all_spaces():
-	return frappe.get_all("Wiki Space", pluck="route")
+	from wiki.permissions import get_readable_spaces
+
+	return get_readable_spaces(pluck="route")

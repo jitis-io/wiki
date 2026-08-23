@@ -267,11 +267,12 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 		self.assertFalse(wiki_document_has_permission(doc, "write", self.reader))
 		self.assertTrue(wiki_document_has_permission(doc, "write", self.writer))
 
-	def test_orphan_document_readable_by_all_writable_by_manager(self):
+	def test_orphan_document_is_manager_only_for_desk_repair(self):
 		doc = frappe.get_doc({"doctype": "Wiki Document", "title": "Orphan", "wiki_space": None})
-		self.assertTrue(wiki_document_has_permission(doc, "read", self.outsider))
+		self.assertFalse(wiki_document_has_permission(doc, "read", self.outsider))
 		self.assertFalse(wiki_document_has_permission(doc, "read", "Guest"))
 		self.assertFalse(wiki_document_has_permission(doc, "write", self.outsider))
+		self.assertTrue(wiki_document_has_permission(doc, "read", self.manager))
 		self.assertTrue(wiki_document_has_permission(doc, "write", self.manager))
 
 	def test_guest_cannot_read_unpublished_document_in_public_space(self):

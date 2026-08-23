@@ -1,1 +1,1 @@
-__version__ = "3.0.0+jitis.7"
+__version__ = "3.0.0+jitis.8"
