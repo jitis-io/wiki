@@ -609,14 +609,13 @@ class TestGetWebContextBreadcrumbs(WikiDocumentTestBase):
 		self.assertNotIn("Breadcrumb Group", names)
 		self.assertNotIn("Breadcrumb Subgroup", names)
 
-	def test_breadcrumbs_absent_for_orphan_document(self):
-		"""Documents with no wiki_space (chromeless/orphan) get no breadcrumbs."""
+	def test_breadcrumbs_fail_closed_for_orphan_document(self):
+		"""Documents with no wiki_space are not rendered to any tenant."""
 		orphan = create_test_wiki_document(self, "Orphan Breadcrumb Doc")
 		orphan.reload()
 
-		context = orphan.get_web_context()
-
-		self.assertIsNone(context["breadcrumbs"])
+		with self.assertRaises(frappe.DoesNotExistError):
+			orphan.get_web_context()
 
 	def test_breadcrumbs_escape_script_breaking_titles(self):
 		"""No raw "<" may reach the serialized JSON, since the template embeds

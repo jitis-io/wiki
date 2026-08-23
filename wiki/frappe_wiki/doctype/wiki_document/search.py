@@ -71,6 +71,8 @@ def _filter_hits_by_space_visibility(hits: list[dict]) -> list[dict]:
 			continue
 		if not document.is_published or document.is_group or document.is_external_link:
 			continue
+		if not frappe.get_cached_value("Wiki Space", document.wiki_space, "is_published"):
+			continue
 		if can_read_document(document, require_published=True):
 			allowed.append(hit)
 	return allowed
