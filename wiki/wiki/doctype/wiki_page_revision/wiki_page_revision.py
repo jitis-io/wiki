@@ -20,7 +20,7 @@ def _get_legacy_revision_rows(wiki_page_name):
 
 
 @frappe.whitelist()
-def get_revisions(wiki_page_name):
+def get_revisions(wiki_page_name: str):
 	# This is a legacy table without tenant scope. Anonymous access is disabled,
 	# and authenticated reads are authorized through the one current Wiki
 	# Document with the same route. Missing or ambiguous migrations fail closed.
