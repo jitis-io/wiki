@@ -135,6 +135,8 @@ def can_read_document(document, user=None, *, require_published: bool = False) -
 	if require_published or user == "Guest":
 		if not frappe.db.get_value("Wiki Document", name, "is_published"):
 			return False
+		if not frappe.get_cached_value("Wiki Space", space, "is_published"):
+			return False
 	return can_read_space(space, user)
 
 
