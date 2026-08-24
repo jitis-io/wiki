@@ -863,29 +863,39 @@ def clear_wiki_content_cache(doc_name: str | None = None):
 def get_landing_page_for_route(route: str) -> dict | None:
 	"""The page a group / Wiki Space route should redirect to, for this user.
 
-	Returns None when the caller may not read the owning space. The check has to
-	happen *before* the redirect: a Location header naming the space's first
-	page would hand a private route to a visitor who is then 404'd when they
-	follow it.
+	Returns None when the route has no single authoritative owning space or the
+	caller may not read that space. These checks have to happen *before* the
+	redirect: a Location header naming the first page would otherwise disclose a
+	private route to a visitor who is then 404'd when they follow it.
 	"""
-	from wiki.permissions import can_read_space
+	from wiki.permissions import can_read_space, resolve_document_space
 
-	group = frappe.db.get_value(
-		"Wiki Document", {"route": route, "is_group": 1}, ["name", "wiki_space"], as_dict=True
+	groups = frappe.get_all(
+		"Wiki Document",
+		filters={"route": route, "is_group": 1},
+		pluck="name",
+		limit=2,
 	)
-	if group:
-		root_group, space = group.name, group.wiki_space
-	else:
-		space_doc = frappe.db.get_value(
-			"Wiki Space", {"route": route, "is_published": 1}, ["name", "root_group"], as_dict=True
-		)
-		if not space_doc:
+	if groups:
+		if len(groups) != 1:
 			return None
+		root_group = groups[0]
+		space = resolve_document_space(root_group)
+	else:
+		spaces = frappe.get_all(
+			"Wiki Space",
+			filters={"route": route, "is_published": 1},
+			fields=["name", "root_group"],
+			limit=2,
+		)
+		if len(spaces) != 1:
+			return None
+		space_doc = spaces[0]
 		root_group, space = space_doc.root_group, space_doc.name
+		if not root_group or resolve_document_space(root_group) != space:
+			return None
 
-	# An orphan group belongs to no space and stays readable by all, matching
-	# check_space_access.
-	if space and not can_read_space(space):
+	if not space or not can_read_space(space):
 		return None
 
 	return get_first_published_page(root_group) if root_group else None

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - jitis-v3
   pull_request:
   workflow_dispatch:
 

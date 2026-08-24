@@ -9,7 +9,9 @@
 		"build": "vite build --base=/assets/wiki/frontend/ && yarn build:highlight && yarn copy-html-entry",
 		"build:highlight": "vite build --config vite.highlight.config.js",
 		"preview": "vite preview",
-		"lint": "biome check --write .",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"test": "node --test",
 		"copy-html-entry": "cp ../wiki/public/frontend/index.html ../wiki/www/wiki-app.html"
 	},
 	"dependencies": {

@@ -1,7 +1,7 @@
 {
   "name": "wiki",
-  "version": "3.0.0+jitis.8",
-  "private": "true",
+  "version": "3.0.0+jitis.9",
+  "private": true,
   "packageManager": "yarn@1.22.22",
   "dependencies": {
     "@tailwindcss/cli": "^4.0.14",
@@ -26,5 +26,5 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "MIT"
 }

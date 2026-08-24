@@ -6,11 +6,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 EXPECTED_COMMITS = {
-	"FRAPPE_COMMIT": "06613fc60b44d5736007ae3107cdab029b2ae045",
-	"ERPNEXT_COMMIT": "8378b6e203841c056925420cc44e6d631c915cf1",
+	"FRAPPE_COMMIT": "6a329d068416768ec47ccd3326b9cc95a8d7bf99",
+	"ERPNEXT_COMMIT": "11e0ba0a1c45f217e2e73e885f699102d06da325",
 }
 
-EXPECTED_WIKI_VERSION = "3.0.0+jitis.8"
+EXPECTED_WIKI_VERSION = "3.0.0+jitis.9"
 
 EXPECTED_ACTION_PINS = {
 	"actions/cache": ("0057852bfaa89a56745cba8c7296529d2fc39830", "v4.3.0"),
@@ -25,6 +25,7 @@ EXPECTED_ACTION_PINS = {
 class CiContractTests(unittest.TestCase):
 	def setUp(self):
 		self.integration = (ROOT / "ci" / "run-integration.sh").read_text(encoding="utf-8")
+		self.quality = (ROOT / "ci" / "run-quality.sh").read_text(encoding="utf-8")
 
 	def test_framework_dependencies_are_exact_sha1_pins(self):
 		found = dict(
@@ -37,16 +38,39 @@ class CiContractTests(unittest.TestCase):
 			r'__version__ = "([^"]+)"\n?',
 			(ROOT / "wiki" / "__init__.py").read_text(encoding="utf-8"),
 		)
-		package_version = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
+		package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+		package_version = package["version"]
 
 		self.assertIsNotNone(python_version)
 		self.assertEqual(python_version.group(1), EXPECTED_WIKI_VERSION)
 		self.assertEqual(package_version, EXPECTED_WIKI_VERSION)
+		self.assertIs(package["private"], True)
+		self.assertEqual(package["license"], "MIT")
+
+	def test_quality_runs_frozen_frontend_node_tests_without_writing(self):
+		frontend_package = json.loads((ROOT / "frontend" / "package.json").read_text(encoding="utf-8"))
+		scripts = frontend_package["scripts"]
+
+		self.assertEqual(scripts["lint"], "biome check .")
+		self.assertNotIn("--write", scripts["lint"])
+		self.assertEqual(scripts["test"], "node --test")
+		commands = [
+			"yarn --cwd frontend install --frozen-lockfile --non-interactive",
+			"yarn --cwd frontend test",
+		]
+		positions = [self.quality.index(command) for command in commands]
+		self.assertEqual(positions, sorted(positions))
+		self.assertNotIn("yarn --cwd frontend lint", self.quality)
+
+	def test_ui_tests_run_for_jitis_v3_pushes(self):
+		workflow = (ROOT / ".github" / "workflows" / "ui-tests.yml").read_text(encoding="utf-8")
+		push_block = workflow.split("push:", 1)[1].split("pull_request:", 1)[0]
+		self.assertIn("- jitis-v3", push_block)
 
 	def test_release_tags_and_resolved_commits_are_verified(self):
-		self.assertIn("--frappe-branch v16.29.0", self.integration)
+		self.assertIn("--frappe-branch v16.31.0", self.integration)
 		self.assertIn('test "$(git -C apps/frappe rev-parse HEAD)" = "$FRAPPE_COMMIT"', self.integration)
-		self.assertIn("bench get-app --branch v16.30.0 --skip-assets erpnext", self.integration)
+		self.assertIn("bench get-app --branch v16.32.3 --skip-assets erpnext", self.integration)
 		self.assertIn('test "$(git -C apps/erpnext rev-parse HEAD)" = "$ERPNEXT_COMMIT"', self.integration)
 
 	def test_exact_private_tree_is_installed_and_fully_tested(self):

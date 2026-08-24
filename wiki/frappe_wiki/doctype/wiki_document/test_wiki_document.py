@@ -2257,6 +2257,16 @@ class TestSpaceUrlFirstPage(WikiDocumentTestBase):
 	"""The space URL must land on the first page in sidebar order (sort_order),
 	not the first descendant in NestedSet (lft) order."""
 
+	TEST_CLIENT = get_test_client()
+
+	def _assert_route_is_not_disclosed(self, route: str, private_route: str) -> None:
+		frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
+		for suffix in ("", ".md"):
+			with self.subTest(suffix=suffix):
+				response = _make_request(self.TEST_CLIENT, "get", f"/{route}{suffix}")
+				self.assertEqual(response.status_code, 404)
+				self.assertNotIn(private_route, response.headers.get("Location", ""))
+
 	def test_first_page_follows_sidebar_sort_order_not_lft(self):
 		from wiki.frappe_wiki.doctype.wiki_document.wiki_document import get_first_published_page
 
@@ -2326,6 +2336,105 @@ class TestSpaceUrlFirstPage(WikiDocumentTestBase):
 		with self.assertRaises(frappe.Redirect):
 			renderer.can_render()
 		self.assertEqual(frappe.local.flags.redirect_location, "/" + target.route)
+
+	def test_orphan_group_route_does_not_disclose_its_first_page(self):
+		suffix = frappe.generate_hash(length=6)
+		orphan = create_test_wiki_document(
+			self,
+			"Orphan Redirect Group",
+			is_group=True,
+			slug=f"orphan-group-{suffix}",
+		)
+		target = create_test_wiki_document(
+			self,
+			"Orphan Redirect Target",
+			parent=orphan.name,
+			slug=f"orphan-target-{suffix}",
+		)
+
+		self._assert_route_is_not_disclosed(orphan.route, target.route)
+
+	def test_mismatched_group_space_stamp_does_not_disclose_its_first_page(self):
+		suffix = frappe.generate_hash(length=6)
+		root = create_test_wiki_document(
+			self,
+			"Mismatched Redirect Root",
+			is_group=True,
+			slug=f"mismatch-root-{suffix}",
+		)
+		owning_space = create_test_wiki_space(
+			self,
+			"Mismatched Redirect Owner",
+			f"mismatch-owner-{suffix}",
+			root.name,
+			roles=[("Guest", "Read")],
+		)
+		group = create_test_wiki_document(
+			self,
+			"Mismatched Redirect Group",
+			parent=owning_space.root_group,
+			is_group=True,
+			slug=f"mismatch-group-{suffix}",
+		)
+		target = create_test_wiki_document(
+			self,
+			"Mismatched Redirect Target",
+			parent=group.name,
+			slug=f"mismatch-target-{suffix}",
+		)
+
+		other_root = create_test_wiki_document(
+			self,
+			"Mismatched Redirect Other Root",
+			is_group=True,
+			slug=f"mismatch-other-root-{suffix}",
+		)
+		other_space = create_test_wiki_space(
+			self,
+			"Mismatched Redirect Other Space",
+			f"mismatch-other-{suffix}",
+			other_root.name,
+			roles=[("Guest", "Read")],
+		)
+		frappe.db.set_value(
+			"Wiki Document",
+			group.name,
+			"wiki_space",
+			other_space.name,
+			update_modified=False,
+		)
+
+		self._assert_route_is_not_disclosed(group.route, target.route)
+
+	def test_private_group_route_does_not_disclose_its_first_page(self):
+		suffix = frappe.generate_hash(length=6)
+		root = create_test_wiki_document(
+			self,
+			"Private Redirect Root",
+			is_group=True,
+			slug=f"private-root-{suffix}",
+		)
+		space = create_test_wiki_space(
+			self,
+			"Private Redirect Space",
+			f"private-space-{suffix}",
+			root.name,
+		)
+		group = create_test_wiki_document(
+			self,
+			"Private Redirect Group",
+			parent=space.root_group,
+			is_group=True,
+			slug=f"private-group-{suffix}",
+		)
+		target = create_test_wiki_document(
+			self,
+			"Private Redirect Target",
+			parent=group.name,
+			slug=f"private-target-{suffix}",
+		)
+
+		self._assert_route_is_not_disclosed(group.route, target.route)
 
 
 class TestWikiTreeCache(WikiDocumentTestBase):
