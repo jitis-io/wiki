@@ -7,8 +7,8 @@ fork; it must not carry or apply a second copy of the privacy patch.
 ## Production compatibility contract
 
 - Frappe `v16.31.0` at `6a329d068416768ec47ccd3326b9cc95a8d7bf99`
-- ERPNext `v16.32.1` at `21d187302045476f1ceb5d0d86219389ab1e75b8`
-- Wiki `3.0.0+jitis.7` at `31d632baf22039c0b07dfb08e9a8377604b1caf8`
+- ERPNext `v16.32.3` at `11e0ba0a1c45f217e2e73e885f699102d06da325`
+- Wiki `3.0.0+jitis.8` at `7f09528280ac6ce56db554bbbaa97b8d5e8779ac`
 - Python 3.14, Node.js 24 and MariaDB 11.8
 
 The Wiki fork pipeline creates clean Frappe v16 benches and runs the privacy,
