@@ -6,8 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 EXPECTED_COMMITS = {
-	"FRAPPE_COMMIT": "6a329d068416768ec47ccd3326b9cc95a8d7bf99",
-	"ERPNEXT_COMMIT": "11e0ba0a1c45f217e2e73e885f699102d06da325",
+	"FRAPPE_COMMIT": "5cba016e86b54b57f34a3864282b92300ef20fb0",
+	"ERPNEXT_COMMIT": "b24c9eba551905e256e336ff170a91a92d197a2f",
 }
 
 EXPECTED_WIKI_VERSION = "3.0.0+jitis.9"
@@ -68,9 +68,9 @@ class CiContractTests(unittest.TestCase):
 		self.assertIn("- jitis-v3", push_block)
 
 	def test_release_tags_and_resolved_commits_are_verified(self):
-		self.assertIn("--frappe-branch v16.31.0", self.integration)
+		self.assertIn("--frappe-branch v16.32.0", self.integration)
 		self.assertIn('test "$(git -C apps/frappe rev-parse HEAD)" = "$FRAPPE_COMMIT"', self.integration)
-		self.assertIn("bench get-app --branch v16.32.3 --skip-assets erpnext", self.integration)
+		self.assertIn("bench get-app --branch v16.33.0 --skip-assets erpnext", self.integration)
 		self.assertIn('test "$(git -C apps/erpnext rev-parse HEAD)" = "$ERPNEXT_COMMIT"', self.integration)
 
 	def test_exact_private_tree_is_installed_and_fully_tested(self):

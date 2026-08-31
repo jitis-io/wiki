@@ -9,8 +9,8 @@ readonly DB_ROOT_PASSWORD="${DB_ROOT_PASSWORD:-root}"
 readonly SITE_NAME="${SITE_NAME:-test_site}"
 readonly WIKI_ONLY_SITE_NAME="${WIKI_ONLY_SITE_NAME:-wiki_test_site}"
 
-readonly FRAPPE_COMMIT="6a329d068416768ec47ccd3326b9cc95a8d7bf99"
-readonly ERPNEXT_COMMIT="11e0ba0a1c45f217e2e73e885f699102d06da325"
+readonly FRAPPE_COMMIT="5cba016e86b54b57f34a3864282b92300ef20fb0"
+readonly ERPNEXT_COMMIT="b24c9eba551905e256e336ff170a91a92d197a2f"
 
 mysql_ready() {
 	mariadb-admin ping \
@@ -38,7 +38,7 @@ redis-server --daemonize yes --port 13000 --save "" --appendonly no
 redis-server --daemonize yes --port 11000 --save "" --appendonly no
 
 bench init \
-	--frappe-branch v16.31.0 \
+	--frappe-branch v16.32.0 \
 	--python "$(command -v python)" \
 	--skip-assets \
 	--skip-redis-config-generation \
@@ -47,7 +47,7 @@ bench init \
 cd "$BENCH_DIR"
 test "$(git -C apps/frappe rev-parse HEAD)" = "$FRAPPE_COMMIT"
 
-bench get-app --branch v16.32.3 --skip-assets erpnext https://github.com/frappe/erpnext.git
+bench get-app --branch v16.33.0 --skip-assets erpnext https://github.com/frappe/erpnext.git
 test "$(git -C apps/erpnext rev-parse HEAD)" = "$ERPNEXT_COMMIT"
 
 ensure_source_ref
