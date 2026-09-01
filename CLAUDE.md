@@ -2,6 +2,20 @@
 
 Frappe Wiki (Version 3), is a modern Wiki product built on Frappe Framework and Frappe UI (VueJS).
 
+## JITIS Fork Context
+
+For JITIS product work, `origin` (`jitis-io/wiki`) is the maintained fork and
+`jitis-v3` is its canonical branch. Keep the JITIS security and portal diff
+small, upstream-compatible and covered by negative guest and cross-customer
+tests. Production consumes only an annotated JITIS release tag and exact commit
+through the ERP platform app lock. Follow `docs/jitis-private-fork.md` for the
+stable-tag sync and release contract.
+
+The upstream pull-request instructions below apply only when the task
+explicitly asks for a contribution to `frappe/wiki`. For ordinary JITIS work,
+do not ignore `origin`, base on `upstream/develop`, push to `upstream`, or open
+an upstream PR.
+
 ## IMPORTANT
 
 Always load and user frappe-app-dev skills.
@@ -31,7 +45,7 @@ Use Tracer bullets comes from the Pragmatic Programmer. When building systems, y
 * When we fix a bug, add at the very least a Unit test, and verify before/after by temp revert of fix to make sure the test tests what is intended
 * For bigger features/workflows, e2e playwright tests are a must.
 
-## Pull Requests
+## Upstream Pull Requests (only when explicitly requested)
 
 * The canonical repo is `frappe/wiki` (git remote `upstream`). **Ignore the fork (`origin`) entirely.**
     * Branch off `upstream/develop` (run `git fetch upstream develop` first), not local/fork develop — the fork's develop is often stale and inflates the diff.
