@@ -8,8 +8,8 @@ requires-python = ">=3.14"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
-    "markdown-it-py>=3.0",
-    "mdit-py-plugins>=0.4",
+    "markdown-it-py>=4.2.0",
+    "mdit-py-plugins>=0.6.1",
 ]
 
 [project.urls]
@@ -18,7 +18,7 @@ Repository = "https://github.com/frappe/wiki.git"
 "Bug Reports" = "https://github.com/frappe/wiki/issues"
 
 [build-system]
-requires = ["flit_core >=3.4,<4"]
+requires = ["flit_core >=4.0.2,<5"]
 build-backend = "flit_core.buildapi"
 
 
