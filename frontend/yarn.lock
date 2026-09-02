@@ -1006,10 +1006,15 @@
   dependencies:
     "@tanstack/virtual-core" "3.17.7"
 
-"@tiptap/core@3.30.0", "@tiptap/core@^3.26.0":
+"@tiptap/core@3.30.0":
   version "3.30.0"
   resolved "https://registry.yarnpkg.com/@tiptap/core/-/core-3.30.0.tgz#8cee48f499491fee2e95445dadcb4d7991777fe4"
   integrity sha512-jlR5STfcpoYxvqnWoR6dhnkB0OBTNbTWd/Jw10wx1LLCrUOK2vrM1z3rXdiVSqqoDjphEu8HX/k4q+Okt+5YGg==
+
+"@tiptap/core@^3.26.0", "@tiptap/core@^3.30.4":
+  version "3.30.4"
+  resolved "https://registry.yarnpkg.com/@tiptap/core/-/core-3.30.4.tgz#9e0847c5f4dd53750ae3accc6b83223e37f693b3"
+  integrity sha512-V9yKuUfV8qC9WBrnVxkFWmYLBomc3d1CwXoFSjED5DRu5q2oyxv07F+jOJSRogJAY+feHjuxvjhixwxeHm2DXQ==
 
 "@tiptap/extension-blockquote@3.30.0", "@tiptap/extension-blockquote@^3.26.0":
   version "3.30.0"
