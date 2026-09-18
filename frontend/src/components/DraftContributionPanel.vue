@@ -1,66 +1,72 @@
 <template>
 	<div class="h-full flex flex-col">
 		<div v-if="crPage && crPage.doc_key === props.docKey" class="h-full flex flex-col">
-			<div class="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-outline-gray-2 bg-surface-base px-3 sm:px-5">
-				<div
-					class="flex min-w-0 items-center gap-1 text-sm text-ink-gray-5 cursor-pointer hover:text-ink-gray-7 group/route"
-					@click="openRouteDialog"
-				>
-					<span class="font-mono truncate">/{{ crPage.route || '' }}</span>
-					<span class="lucide-pencil size-3 shrink-0 opacity-0 group-hover/route:opacity-100" aria-hidden="true" />
-				</div>
+			<div class="flex h-12 shrink-0 items-center gap-2 border-b border-outline-gray-2 bg-surface-base px-3 sm:px-5">
+				<Breadcrumbs :items="breadcrumbs" class="min-w-0 flex-1" />
 
 				<div class="flex shrink-0 items-center gap-2">
-					<Button
-						variant="solid"
-						:loading="isSaving"
-						@click="saveFromHeader"
-					>
-						{{ __('Save') }}
-					</Button>
+					<SubmitForReviewButton />
 					<Dropdown :options="menuOptions">
-						<Button variant="ghost" :title="__('More actions')">
-							<span class="lucide-more-vertical size-4" aria-hidden="true" />
+						<Button
+							variant="ghost"
+							:title="__('Page actions')"
+							:aria-label="__('Page actions')"
+						>
+							<span class="lucide-more-horizontal size-4" aria-hidden="true" />
 						</Button>
 					</Dropdown>
 				</div>
 			</div>
 
-			<div v-if="!crPage.is_group" class="flex-1 overflow-auto pb-10">
-				<WikiEditor v-if="editorKey" :key="editorKey" ref="editorRef" :content="editorContent" :document-key="props.docKey" :space-id="props.spaceId" :saved-content="savedContent" @save="saveContent" @save-all="flushOtherDirtyPages" @content-change="onEditorContentChange" @content-ready="onEditorContentReady">
+			<!-- The one scroller on this page: the editor body scrolls under
+			     the sticky toolbar, and the bubble menu and the outline rail
+			     both measure against it. -->
+			<ScrollArea v-if="!crPage.is_group" class="min-h-0 flex-1" viewport-class="pb-10">
+				<WikiEditor :space-id="props.spaceId" v-if="editorKey" :key="editorKey" ref="editorRef" :content="editorContent" :document-key="props.docKey" :saved-content="savedContent" @save="saveContent" @save-all="flushOtherDirtyPages" @content-change="onEditorContentChange" @content-ready="onEditorContentReady">
 					<template #title>
-						<div class="pt-8">
-							<input
-								type="text"
-								v-model="editableTitle"
-								class="text-3xl-semibold text-ink-gray-9 bg-transparent border-none outline-none w-full focus:ring-0 p-0 placeholder:text-ink-gray-4"
-								:placeholder="__('Page title')"
-								@blur="saveTitleIfChanged"
-								@keydown.enter="$event.target.blur()"
-							/>
-							<div class="mt-1.5 flex items-center gap-2">
-								<Badge variant="subtle" theme="blue" size="sm">
-									{{ __('Draft') }}
-								</Badge>
+						<div class="pt-10">
+							<div class="flex items-start gap-3">
+								<input
+									type="text"
+									v-model="editableTitle"
+									class="text-3xl-semibold text-ink-gray-9 bg-transparent border-none outline-none w-full min-w-0 flex-1 focus:ring-0 p-0 placeholder:text-ink-gray-4"
+									:placeholder="__('Page title')"
+									@blur="saveTitleIfChanged"
+									@keydown.enter="$event.target.blur()"
+								/>
+								<div class="flex shrink-0 items-center gap-2 pt-2">
+									<span
+										v-if="isPageDirty"
+										class="size-2 rounded-full bg-surface-amber-4"
+										:title="__('Unsaved changes')"
+										:aria-label="__('Unsaved changes')"
+										role="status"
+									/>
+									<Badge variant="subtle" theme="blue" size="sm">
+										{{ __('Draft') }}
+									</Badge>
+								</div>
 							</div>
 						</div>
 					</template>
 				</WikiEditor>
-			</div>
+			</ScrollArea>
 
 			<div v-else class="flex-1 flex flex-col overflow-auto">
-				<div class="mx-auto w-full max-w-[770px] px-6 pt-8">
-					<input
-						type="text"
-						v-model="editableTitle"
-						class="text-3xl-semibold text-ink-gray-9 bg-transparent border-none outline-none w-full focus:ring-0 p-0 placeholder:text-ink-gray-4"
-						:placeholder="__('Group name')"
-						@blur="saveTitleIfChanged"
-						@keydown.enter="$event.target.blur()"
-					/>
-					<div class="mt-1.5 flex items-center gap-2">
-						<Badge variant="subtle" theme="blue" size="sm">{{ __('Draft') }}</Badge>
-						<Badge variant="subtle" theme="gray" size="sm">{{ __('Group') }}</Badge>
+				<div class="mx-auto w-full max-w-3xl px-8 pt-10">
+					<div class="flex items-start gap-3">
+						<input
+							type="text"
+							v-model="editableTitle"
+							class="text-3xl-semibold text-ink-gray-9 bg-transparent border-none outline-none w-full min-w-0 flex-1 focus:ring-0 p-0 placeholder:text-ink-gray-4"
+							:placeholder="__('Group name')"
+							@blur="saveTitleIfChanged"
+							@keydown.enter="$event.target.blur()"
+						/>
+						<div class="flex shrink-0 items-center gap-2 pt-2">
+							<Badge variant="subtle" theme="blue" size="sm">{{ __('Draft') }}</Badge>
+							<Badge variant="subtle" theme="gray" size="sm">{{ __('Group') }}</Badge>
+						</div>
 					</div>
 				</div>
 				<div class="flex-1 flex items-center justify-center text-ink-gray-5">
@@ -74,24 +80,24 @@
 		</div>
 
 		<div v-else-if="!loadFailed" class="h-full flex flex-col">
-			<div class="flex min-h-12 shrink-0 items-center justify-between border-b border-outline-gray-2 px-3 sm:px-5">
-				<Skeleton class="h-4 w-40 rounded" />
+			<div class="flex h-12 shrink-0 items-center justify-between border-b border-outline-gray-2 px-3 sm:px-5">
+				<Skeleton class="h-4 w-40 rounded-4" />
 				<div class="flex items-center gap-2">
-					<Skeleton class="h-8 w-16 rounded" />
-					<Skeleton class="size-8 rounded" />
+					<Skeleton class="h-8 w-16 rounded-4" />
+					<Skeleton class="size-8 rounded-4" />
 				</div>
 			</div>
-			<div class="mx-auto w-full max-w-[770px] flex-1 px-6 pb-6 pt-8 space-y-4">
-				<Skeleton class="h-8 w-64 rounded" />
+			<div class="mx-auto w-full max-w-3xl flex-1 px-8 pb-10 pt-10 space-y-4">
+				<Skeleton class="h-8 w-64 rounded-4" />
 				<Skeleton class="h-5 w-14 rounded-full" />
-				<Skeleton class="h-4 w-3/4 rounded" />
-				<Skeleton class="h-4 w-full rounded" />
-				<Skeleton class="h-4 w-5/6 rounded" />
-				<Skeleton class="h-4 w-full rounded" />
-				<Skeleton class="h-4 w-2/3 rounded" />
-				<Skeleton class="h-4 w-full rounded mt-6" />
-				<Skeleton class="h-4 w-4/5 rounded" />
-				<Skeleton class="h-4 w-full rounded" />
+				<Skeleton class="h-4 w-3/4 rounded-4" />
+				<Skeleton class="h-4 w-full rounded-4" />
+				<Skeleton class="h-4 w-5/6 rounded-4" />
+				<Skeleton class="h-4 w-full rounded-4" />
+				<Skeleton class="h-4 w-2/3 rounded-4" />
+				<Skeleton class="h-4 w-full rounded-4 mt-6" />
+				<Skeleton class="h-4 w-4/5 rounded-4" />
+				<Skeleton class="h-4 w-full rounded-4" />
 			</div>
 		</div>
 
@@ -126,22 +132,26 @@
 </template>
 
 <script setup>
+import { SPACE_TREE_KEY, crumbRoute, trailToNode } from '@/lib/spaceTree';
 import { useChangeRequestStore } from '@/stores/changeRequest';
 import { useDraftWorkspaceStore } from '@/stores/draftWorkspace';
 import {
 	Badge,
+	Breadcrumbs,
 	Button,
 	Dialog,
 	Dropdown,
 	FormControl,
 	LoadingIndicator,
+	ScrollArea,
 	Skeleton,
 	getCachedDocumentResource,
 	toast,
 	usePageMeta,
 } from 'frappe-ui';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import SubmitForReviewButton from './SubmitForReviewButton.vue';
 import WikiEditor from './WikiEditor.vue';
 
 const props = defineProps({
@@ -183,6 +193,26 @@ usePageMeta(() => {
 		? getCachedDocumentResource('Wiki Space', props.spaceId)
 		: null;
 	return { title: [title, space?.doc?.space_name].filter(Boolean).join(' | ') };
+});
+
+const spaceTree = inject(SPACE_TREE_KEY, null);
+
+// Same trail an already-merged page shows. A draft page is in the tree under
+// its tmp key, so it reads its home before it is ever saved. The last crumb
+// follows the title input rather than the stored title.
+const breadcrumbs = computed(() => {
+	const children = spaceTree?.value?.children;
+	if (!children?.length) return [];
+
+	const trail = trailToNode(children, (node) => node.doc_key === props.docKey);
+	if (!trail) return [];
+
+	return trail.map((node, i) => ({
+		label:
+			(i === trail.length - 1 ? editableTitle.value : node.title) ||
+			__('Untitled'),
+		route: crumbRoute(node, props.spaceId),
+	}));
 });
 
 // Read the page through the workspace store. Tmp pages live entirely on the
@@ -307,6 +337,11 @@ watch(
 // Once the create syncs, swap the URL from /draft/tmp_* to /draft/realKey.
 // Without this the panel would stay on a temp key after sync, and any
 // reload would 404 on get_cr_page.
+//
+// Immediate, because the create can resolve before this panel mounts — the
+// navigation to /draft/tmp_* and the create race each other, and on a fast
+// bench the create wins. A lazy watcher then never fires for a key that was
+// promoted moments earlier, stranding the page on "Draft not found".
 watch(
 	() => draftStore.tempKeyResolutions[props.docKey],
 	(realKey) => {
@@ -333,6 +368,7 @@ watch(
 			});
 		}
 	},
+	{ immediate: true },
 );
 
 watch(
@@ -357,11 +393,13 @@ const editorContent = computed(() => {
 	return crPage.value?.content || '';
 });
 
-// Save state is owned by the workspace store.
-const pageSaveStatus = computed(
-	() => draftStore.pagesByKey[props.docKey]?.saveStatus || 'idle',
-);
-const isSaving = computed(() => pageSaveStatus.value === 'saving');
+// Same divergence test the store's finalization gate uses, for this page.
+const isPageDirty = computed(() => {
+	const page = draftStore.pagesByKey[props.docKey];
+	return Boolean(
+		page?.localContent != null && page.localContent !== page.content,
+	);
+});
 // The editor normalizes this confirmed snapshot before handing it back to
 // the store for comparison.
 const savedContent = computed(
@@ -378,8 +416,13 @@ const editorKey = computed(() => {
 const menuOptions = computed(() => {
 	return [
 		{
+			label: __('Change route'),
+			icon: 'lucide-link',
+			onClick: openRouteDialog,
+		},
+		{
 			label: __('Delete Draft'),
-			icon: 'trash-2',
+			icon: 'lucide-trash-2',
 			onClick: deleteDraft,
 		},
 	];
@@ -419,10 +462,6 @@ async function saveRoute(close) {
 	} finally {
 		isSavingRoute.value = false;
 	}
-}
-
-function saveFromHeader() {
-	editorRef.value?.saveToDB();
 }
 
 async function saveContent(content) {

@@ -1,10 +1,21 @@
 <template>
-    <div class="wiki-editor-container">
+    <div class="wiki-editor-container" ref="containerRef">
         <div>
+            <!-- Stays outside the content row: it's a full-width sticky bar, and
+                 making it a flex child would strand it above one column. -->
             <WikiToolbar v-if="!readonly" :editor="editor" @uploadImage="handleImageUpload" />
-            <div class="w-full max-w-[770px] px-6">
-                <slot name="title" />
-                <EditorContent :editor="editor" :class="contentClass" />
+            <EditorTableOfContents v-if="showTocStrip" :editor="editor" variant="strip" />
+            <!-- The outline gets a gutter of its own rather than floating over
+                 a centred column's leftovers: the padding reserves it, and the
+                 column re-centres in what remains. The column shifts when the
+                 outline appears, which is what buys it back on a 1280px
+                 screen — floating over both gutters needed 1400. -->
+            <div class="relative" :class="showTocRail ? 'pr-60' : ''">
+                <div class="mx-auto w-full max-w-3xl px-8">
+                    <slot name="title" />
+                    <EditorContent :editor="editor" :class="contentClass" />
+                </div>
+                <EditorTableOfContents v-if="showTocRail" :editor="editor" variant="rail" />
             </div>
             <!-- After EditorContent so the ProseMirror DOM is attached when the
                  bubble menu mounts; it derives its flip boundary from the editor's
@@ -37,9 +48,10 @@ import {
 	TableRow,
 } from '@tiptap/extension-table';
 import { Placeholder } from '@tiptap/extensions';
-import { onKeyStroke } from '@vueuse/core';
+import { onKeyStroke, useElementSize } from '@vueuse/core';
 import { toast, useFileUpload } from 'frappe-ui';
 import {
+	computed,
 	createApp,
 	h,
 	onBeforeUnmount,
@@ -57,6 +69,7 @@ import {
 	Markdown,
 	useEditor,
 } from 'frappe-ui/editor';
+import EditorTableOfContents from './EditorTableOfContents.vue';
 import LinkPopup from './tiptap-extensions/LinkPopup.vue';
 import SlashCommandsList from './tiptap-extensions/SlashCommandsList.vue';
 import WikiBubbleMenu from './tiptap-extensions/WikiBubbleMenu.vue';
@@ -64,6 +77,7 @@ import WikiToolbar from './tiptap-extensions/WikiToolbar.vue';
 // Import custom extensions
 import { CalloutBlock } from './tiptap-extensions/callout-block.js';
 import { IframeBlock } from './tiptap-extensions/iframe-block.js';
+import { isEmbedUrlPaste } from './tiptap-extensions/iframe-embed.js';
 import { WikiImage } from './tiptap-extensions/image-extension.js';
 import { WikiLink } from './tiptap-extensions/link-extension.js';
 import { canonicalizeMarkdown } from './tiptap-extensions/markdown-normalize.js';
@@ -119,6 +133,13 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	// The outline stands down when something wider has claimed the right of
+	// the page — the page settings panel. Two lists of the page at once is one
+	// too many.
+	showOutline: {
+		type: Boolean,
+		default: true,
+	},
 });
 
 const emit = defineEmits([
@@ -135,6 +156,7 @@ let autosaveTimer = null;
 const fileUploader = useFileUpload();
 
 // Refs for file input and link popup
+const containerRef = ref(null);
 const slashImageInput = ref(null);
 let linkPopupInstance = null;
 let linkPopupApp = null;
@@ -311,6 +333,15 @@ function handlePaste(_view, event) {
 	// default handler keep the rich formatting.
 	const text = event.clipboardData?.getData('text/plain');
 	const html = event.clipboardData?.getData('text/html');
+
+	// A paste that is nothing but an embeddable URL belongs to the iframe
+	// block's paste rule. Handling it as markdown here would consume the event
+	// (returning true stops ProseMirror applying its slice, and with it every
+	// paste rule) and leave a bare link where the video should be.
+	if (text && isEmbedUrlPaste(text)) {
+		return false;
+	}
+
 	if (text && !html && editor.value?.markdown) {
 		event.preventDefault();
 		editor.value
@@ -641,7 +672,12 @@ const editor = useEditor({
 			nested: true,
 		}),
 		Placeholder.configure({
-			placeholder: 'Type "/" for commands, or start writing...',
+			// A freshly inserted callout starts with an empty paragraph, and the
+			// top-level hint reads as if the document itself were empty there.
+			placeholder: ({ editor, pos }) =>
+				editor.state.doc.resolve(pos).parent.type.name === 'calloutBlock'
+					? 'Write the callout…'
+					: 'Type "/" for commands, or start writing...',
 		}),
 		CodeBlock,
 		// Custom extensions
@@ -674,6 +710,24 @@ const contentClass = [
 	'wiki-editor-content',
 	props.readonly ? '' : 'is-editable',
 ];
+
+// The editor's width is the viewport minus the app nav, so a viewport media
+// query would measure the wrong box — watch the element instead. The rail is
+// given its gutter rather than floating over whatever the centred column
+// leaves behind, so the threshold is the 768px prose column plus that one
+// reserve — not a rail's width on each side, which needed a 1400px window.
+// Below it the strip takes over.
+const TOC_RAIL_RESERVE = 240;
+const TOC_RAIL_MIN_WIDTH = 768 + TOC_RAIL_RESERVE;
+const { width: containerWidth } = useElementSize(containerRef);
+const showTocRail = computed(
+	() => props.showOutline && containerWidth.value >= TOC_RAIL_MIN_WIDTH,
+);
+// Width reads 0 until the first ResizeObserver callback; rendering neither
+// variant until then avoids flashing the narrow strip on a wide screen.
+const showTocStrip = computed(
+	() => props.showOutline && containerWidth.value > 0 && !showTocRail.value,
+);
 
 function normalizeMarkdown(content) {
 	return canonicalizeMarkdown(editor.value?.markdown, content);

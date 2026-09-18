@@ -67,7 +67,8 @@ def convert_file_to_webp(file_doc) -> str:
 	file_url. Returns the new (or unchanged, if not convertible) file_url.
 	"""
 	from frappe.core.doctype.file.file import get_local_image
-	from frappe.core.doctype.file.utils import delete_file, get_content_hash
+	from frappe.core.doctype.file.utils import delete_file, generate_file_name, get_content_hash
+	from frappe.utils import get_files_path
 
 	if not file_doc:
 		return ""
@@ -79,9 +80,11 @@ def convert_file_to_webp(file_doc) -> str:
 	):
 		return file_url
 
+	webp_name = generate_file_name(_to_webp(file_doc.file_name or os.path.basename(file_url)))
+
 	try:
 		image, _, _ = get_local_image(file_url)
-		webp_path = _to_webp(file_doc.get_full_path())
+		webp_path = get_files_path(webp_name, is_private=bool(file_doc.is_private))
 		image.save(webp_path, "WEBP")
 	except Exception:
 		# Corrupt or unsupported image — keep the original upload rather than
@@ -92,9 +95,9 @@ def convert_file_to_webp(file_doc) -> str:
 	# delete_file resolves public/private from the URL's leading segment.
 	delete_file(file_url)
 
-	file_doc.file_url = _to_webp(file_url)
-	if file_doc.file_name:
-		file_doc.file_name = _to_webp(file_doc.file_name)
+	file_prefix = "/private/files" if file_doc.is_private else "/files"
+	file_doc.file_url = f"{file_prefix}/{webp_name}"
+	file_doc.file_name = webp_name
 	with open(webp_path, "rb") as handle:
 		webp_content = handle.read()
 	file_doc.content_hash = get_content_hash(webp_content)

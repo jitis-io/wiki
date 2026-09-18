@@ -2,12 +2,16 @@
 # See license.txt
 
 import json
+import os
+from io import BytesIO
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from wiki.tests.factory import WikiFixtureMixin
 
-class TestReorderWikiDocumentsAPI(FrappeTestCase):
+
+class TestReorderWikiDocumentsAPI(WikiFixtureMixin, FrappeTestCase):
 	"""Tests for the reorder_wiki_documents API."""
 
 	def setUp(self):
@@ -21,12 +25,12 @@ class TestReorderWikiDocumentsAPI(FrappeTestCase):
 
 	def test_direct_reorder_as_manager(self):
 		"""Test direct reorder when user has write permission."""
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create multiple pages
-		page1 = create_wiki_document(space.root_group, "Page 1")
-		page2 = create_wiki_document(space.root_group, "Page 2")
-		page3 = create_wiki_document(space.root_group, "Page 3")
+		page1 = create_wiki_document(self, space.root_group, "Page 1")
+		page2 = create_wiki_document(self, space.root_group, "Page 2")
+		page3 = create_wiki_document(self, space.root_group, "Page 3")
 
 		# Set as administrator (has write permission)
 		frappe.set_user("Administrator")
@@ -64,17 +68,17 @@ class TestReorderWikiDocumentsAPI(FrappeTestCase):
 		"""
 		from wiki.api.wiki_space import get_wiki_tree, reorder_wiki_documents
 
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create pages - they will have default sort_order (likely 0 or null)
-		intro = create_wiki_document(space.root_group, "Introduction")
-		q1 = create_wiki_document(space.root_group, "Q1", is_group=True)
-		q2 = create_wiki_document(space.root_group, "Q2", is_group=True)
-		q3 = create_wiki_document(space.root_group, "Q3", is_group=True)
-		q4 = create_wiki_document(space.root_group, "Q4", is_group=True)
-		q5 = create_wiki_document(space.root_group, "Q5", is_group=True)
-		q6 = create_wiki_document(space.root_group, "Q6", is_group=True)
-		license_doc = create_wiki_document(space.root_group, "License")
+		intro = create_wiki_document(self, space.root_group, "Introduction")
+		q1 = create_wiki_document(self, space.root_group, "Q1", is_group=True)
+		q2 = create_wiki_document(self, space.root_group, "Q2", is_group=True)
+		q3 = create_wiki_document(self, space.root_group, "Q3", is_group=True)
+		q4 = create_wiki_document(self, space.root_group, "Q4", is_group=True)
+		q5 = create_wiki_document(self, space.root_group, "Q5", is_group=True)
+		q6 = create_wiki_document(self, space.root_group, "Q6", is_group=True)
+		license_doc = create_wiki_document(self, space.root_group, "License")
 
 		# Set initial sort_order where Q6 is BEFORE Q5 (the wrong order)
 		frappe.db.set_value("Wiki Document", intro.name, "sort_order", 0)
@@ -160,11 +164,11 @@ class TestReorderWikiDocumentsAPI(FrappeTestCase):
 		"""
 		from wiki.api.wiki_space import get_wiki_tree, reorder_wiki_documents
 
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create pages
-		q5 = create_wiki_document(space.root_group, "Q5", is_group=True)
-		q6 = create_wiki_document(space.root_group, "Q6", is_group=True)
+		q5 = create_wiki_document(self, space.root_group, "Q5", is_group=True)
+		q6 = create_wiki_document(self, space.root_group, "Q6", is_group=True)
 
 		# Set initial sort_order where Q6 is BEFORE Q5 (the wrong order)
 		frappe.db.set_value("Wiki Document", q6.name, "sort_order", 0)  # Q6 first - WRONG
@@ -219,11 +223,11 @@ class TestReorderWikiDocumentsAPI(FrappeTestCase):
 		"""
 		from wiki.api.wiki_space import get_wiki_tree
 
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create pages
-		q5 = create_wiki_document(space.root_group, "Q5", is_group=True)
-		q6 = create_wiki_document(space.root_group, "Q6", is_group=True)
+		q5 = create_wiki_document(self, space.root_group, "Q5", is_group=True)
+		q6 = create_wiki_document(self, space.root_group, "Q6", is_group=True)
 
 		# Set initial wrong order: Q6 before Q5
 		frappe.db.set_value("Wiki Document", q6.name, "sort_order", 0)
@@ -272,7 +276,7 @@ class TestReorderWikiDocumentsAPI(FrappeTestCase):
 		remain stable regardless of where it sits in the tree."""
 		from wiki.api.wiki_space import reorder_wiki_documents
 
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Build a small tree:
 		#   root_group
@@ -280,10 +284,10 @@ class TestReorderWikiDocumentsAPI(FrappeTestCase):
 		#   │   ├── page_1       (leaf)
 		#   │   └── page_2       (leaf)
 		#   └── group_b          (group)
-		group_a = create_wiki_document(space.root_group, "Group A", is_group=True)
-		page_1 = create_wiki_document(group_a.name, "Page One")
-		page_2 = create_wiki_document(group_a.name, "Page Two")
-		group_b = create_wiki_document(space.root_group, "Group B", is_group=True)
+		group_a = create_wiki_document(self, space.root_group, "Group A", is_group=True)
+		page_1 = create_wiki_document(self, group_a.name, "Page One")
+		page_2 = create_wiki_document(self, group_a.name, "Page Two")
+		group_b = create_wiki_document(self, space.root_group, "Group B", is_group=True)
 
 		# Record every route before any reorder
 		routes_before = {}
@@ -337,17 +341,17 @@ class TestReorderWikiDocumentsAPI(FrappeTestCase):
 		"""
 		from wiki.api.wiki_space import get_wiki_tree, reorder_wiki_documents
 
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create 8 documents like the user's scenario
-		intro = create_wiki_document(space.root_group, "Introduction")
-		q1 = create_wiki_document(space.root_group, "Q1", is_group=True)
-		q2 = create_wiki_document(space.root_group, "Q2", is_group=True)
-		q3 = create_wiki_document(space.root_group, "Q3", is_group=True)
-		q4 = create_wiki_document(space.root_group, "Q4", is_group=True)
-		q5 = create_wiki_document(space.root_group, "Q5", is_group=True)
-		q6 = create_wiki_document(space.root_group, "Q6", is_group=True)
-		license_doc = create_wiki_document(space.root_group, "License")
+		intro = create_wiki_document(self, space.root_group, "Introduction")
+		q1 = create_wiki_document(self, space.root_group, "Q1", is_group=True)
+		q2 = create_wiki_document(self, space.root_group, "Q2", is_group=True)
+		q3 = create_wiki_document(self, space.root_group, "Q3", is_group=True)
+		q4 = create_wiki_document(self, space.root_group, "Q4", is_group=True)
+		q5 = create_wiki_document(self, space.root_group, "Q5", is_group=True)
+		q6 = create_wiki_document(self, space.root_group, "Q6", is_group=True)
+		license_doc = create_wiki_document(self, space.root_group, "License")
 
 		all_docs = [intro, q1, q2, q3, q4, q5, q6, license_doc]
 		doc_names = [d.name for d in all_docs]
@@ -457,7 +461,7 @@ class TestReorderWikiDocumentsAPI(FrappeTestCase):
 		)
 
 
-class TestWikiDocumentOrderingE2E(FrappeTestCase):
+class TestWikiDocumentOrderingE2E(WikiFixtureMixin, FrappeTestCase):
 	"""End-to-end tests for wiki document ordering on both admin and public-facing sides."""
 
 	def setUp(self):
@@ -471,7 +475,7 @@ class TestWikiDocumentOrderingE2E(FrappeTestCase):
 		"""Test that newly created documents appear at the bottom of the list, not the top."""
 		from wiki.api.wiki_space import get_wiki_tree
 
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create 5 groups with explicit sort_order
 		groups = []
@@ -525,7 +529,7 @@ class TestWikiDocumentOrderingE2E(FrappeTestCase):
 		from wiki.api.wiki_space import get_wiki_tree
 		from wiki.frappe_wiki.doctype.wiki_document.wiki_document import build_nested_wiki_tree
 
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create 5 groups with explicit sort_order and child pages
 		# (public tree only shows groups with published content)
@@ -576,7 +580,7 @@ class TestWikiDocumentOrderingE2E(FrappeTestCase):
 		from wiki.api.wiki_space import get_wiki_tree, reorder_wiki_documents
 		from wiki.frappe_wiki.doctype.wiki_document.wiki_document import build_nested_wiki_tree
 
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create 5 groups: Q1, Q2, Q3, Q4, Q5 with child pages
 		docs = []
@@ -658,7 +662,7 @@ class TestWikiDocumentOrderingE2E(FrappeTestCase):
 
 		# Step 1: Create space with 5 groups (with child pages for public visibility)
 		print("\nStep 1: Creating space with 5 groups...")
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		docs = []
 		for i in range(1, 6):
@@ -760,11 +764,11 @@ class TestWikiDocumentOrderingE2E(FrappeTestCase):
 
 	def test_direct_move_changes_parent(self):
 		"""Test that moving a document to a new parent updates the parent."""
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create a group and a page
-		group = create_wiki_document(space.root_group, "Group", is_group=True)
-		page = create_wiki_document(space.root_group, "Page to Move")
+		group = create_wiki_document(self, space.root_group, "Group", is_group=True)
+		page = create_wiki_document(self, space.root_group, "Page to Move")
 
 		frappe.set_user("Administrator")
 
@@ -786,13 +790,13 @@ class TestWikiDocumentOrderingE2E(FrappeTestCase):
 
 	def test_reorder_children_within_group(self):
 		"""Test reordering children within a group (not at root level)."""
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create a group with three children
-		group = create_wiki_document(space.root_group, "Test Group", is_group=True)
-		child1 = create_wiki_document(group.name, "Child 1")
-		child2 = create_wiki_document(group.name, "Child 2")
-		child3 = create_wiki_document(group.name, "Child 3")
+		group = create_wiki_document(self, space.root_group, "Test Group", is_group=True)
+		child1 = create_wiki_document(self, group.name, "Child 1")
+		child2 = create_wiki_document(self, group.name, "Child 2")
+		child3 = create_wiki_document(self, group.name, "Child 3")
 
 		frappe.set_user("Administrator")
 
@@ -826,7 +830,7 @@ class TestWikiDocumentOrderingE2E(FrappeTestCase):
 		self.assertEqual(child3.parent_wiki_document, group.name)
 
 
-class TestRebuildWikiTree(FrappeTestCase):
+class TestRebuildWikiTree(WikiFixtureMixin, FrappeTestCase):
 	"""Tests for the rebuild_wiki_tree function."""
 
 	def setUp(self):
@@ -838,12 +842,12 @@ class TestRebuildWikiTree(FrappeTestCase):
 
 	def test_rebuild_respects_sort_order(self):
 		"""Test that rebuild_wiki_tree respects sort_order field."""
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		# Create pages with explicit sort orders (reverse alphabetical)
-		page_c = create_wiki_document(space.root_group, "Page C")
-		page_b = create_wiki_document(space.root_group, "Page B")
-		page_a = create_wiki_document(space.root_group, "Page A")
+		page_c = create_wiki_document(self, space.root_group, "Page C")
+		page_b = create_wiki_document(self, space.root_group, "Page B")
+		page_a = create_wiki_document(self, space.root_group, "Page A")
 
 		# Set sort orders to put them in reverse order
 		frappe.db.set_value("Wiki Document", page_c.name, "sort_order", 0)
@@ -864,34 +868,192 @@ class TestRebuildWikiTree(FrappeTestCase):
 		self.assertLess(page_b.lft, page_a.lft)
 
 
+class TestRestrictedSpaces(WikiFixtureMixin, FrappeTestCase):
+	"""Tests for get_restricted_spaces, which backs the sidebar's lock icon."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_a_space_with_no_roles_is_not_restricted(self):
+		"""No role rows means every logged-in user can read it."""
+		from wiki.api.wiki_space import get_restricted_spaces
+
+		space = create_test_wiki_space(self)
+
+		self.assertEqual(get_restricted_spaces([space.name]), [])
+
+	def test_a_guest_role_makes_a_space_public(self):
+		"""frappe.get_roles() returns Guest anonymously, so a Guest row is public."""
+		from wiki.api.wiki_space import get_restricted_spaces
+
+		space = create_test_wiki_space(self)
+		space.append("roles", {"role": "Guest", "permission_level": "Read"})
+		space.save()
+
+		self.assertEqual(get_restricted_spaces([space.name]), [])
+
+	def test_an_all_role_is_not_restricted(self):
+		"""frappe.get_roles() returns All for every logged-in user."""
+		from wiki.api.wiki_space import get_restricted_spaces
+
+		space = create_test_wiki_space(self)
+		space.append("roles", {"role": "All", "permission_level": "Read"})
+		space.append("roles", {"role": "Wiki Approver", "permission_level": "Write"})
+		space.save()
+
+		self.assertEqual(get_restricted_spaces([space.name]), [])
+
+	def test_role_rows_without_guest_are_restricted(self):
+		from wiki.api.wiki_space import get_restricted_spaces
+
+		space = create_test_wiki_space(self)
+		space.append("roles", {"role": "Wiki Approver", "permission_level": "Read"})
+		space.save()
+
+		self.assertEqual(get_restricted_spaces([space.name]), [space.name])
+
+	def test_only_the_named_spaces_are_reported(self):
+		"""The sidebar asks about one page of spaces, not the whole wiki."""
+		from wiki.api.wiki_space import get_restricted_spaces
+
+		restricted = create_test_wiki_space(self)
+		restricted.append("roles", {"role": "Wiki Approver", "permission_level": "Read"})
+		restricted.save()
+		other = create_test_wiki_space(self)
+		other.append("roles", {"role": "Wiki Approver", "permission_level": "Read"})
+		other.save()
+
+		self.assertEqual(get_restricted_spaces([restricted.name]), [restricted.name])
+
+	def test_an_empty_request_is_answered_without_a_query(self):
+		from wiki.api.wiki_space import get_restricted_spaces
+
+		self.assertEqual(get_restricted_spaces([]), [])
+
+	def test_non_string_names_are_rejected(self):
+		"""Objects and numbers would reach the SQL `in` clause unescaped or type-coerced."""
+		from wiki.api.wiki_space import get_restricted_spaces, get_space_stats
+
+		for payload in ([{"name": "x"}], [1, 2], [["x"]], {"a": 1}, "x"):
+			for endpoint in (get_restricted_spaces, get_space_stats):
+				with self.subTest(payload=payload, endpoint=endpoint.__name__):
+					self.assertRaises(frappe.FrappeTypeError, endpoint, payload)
+
+
 # Helper functions
 
 
-def create_test_wiki_space():
-	"""Create a test Wiki Space with a root group."""
-	root_group = frappe.new_doc("Wiki Document")
-	root_group.title = f"Test Root {frappe.generate_hash(length=6)}"
-	root_group.is_group = 1
-	root_group.insert()
+class TestSpaceStats(WikiFixtureMixin, FrappeTestCase):
+	"""Tests for get_space_stats, which backs the All Spaces directory columns."""
 
-	space = frappe.new_doc("Wiki Space")
-	space.space_name = f"Test Space {frappe.generate_hash(length=6)}"
-	space.route = f"test-space-{frappe.generate_hash(length=6)}"
-	space.root_group = root_group.name
-	space.insert()
+	def setUp(self):
+		frappe.set_user("Administrator")
 
-	return space
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_pages_count_excludes_groups_and_external_links(self):
+		"""A group is navigation and a link points elsewhere; neither is a page."""
+		from wiki.api.wiki_space import get_space_stats
+
+		space = create_test_wiki_space(self)
+		create_wiki_document(self, space.root_group, "Page One")
+		create_wiki_document(self, space.root_group, "Page Two")
+		create_wiki_document(self, space.root_group, "A Group", is_group=True)
+		self.wiki.document(
+			parent=space.root_group,
+			title="Elsewhere",
+			is_external_link=1,
+			external_url="https://example.com",
+		)
+
+		self.assertEqual(get_space_stats([space.name])[space.name]["pages"], 2)
+
+	def test_only_requests_awaiting_review_are_counted(self):
+		"""A Draft is private work in progress; the rest are already finished."""
+		from wiki.api.wiki_space import get_space_stats
+
+		space = create_test_wiki_space(self)
+		for status in ("Draft", "In Review", "Approved", "Merged", "Rejected", "Archived"):
+			self.wiki.track(
+				"Wiki Change Request",
+				frappe.get_doc(
+					{
+						"doctype": "Wiki Change Request",
+						"title": f"CR {status}",
+						"wiki_space": space.name,
+						"status": status,
+					}
+				).insert(ignore_permissions=True, ignore_mandatory=True),
+			)
+
+		stats = get_space_stats([space.name])[space.name]
+		self.assertEqual(stats["change_requests_in_review"], 2)
+
+	def test_a_draft_is_not_counted_as_awaiting_review(self):
+		"""The regression: a space whose only request was a draft reported one."""
+		from wiki.api.wiki_space import get_space_stats
+
+		space = create_test_wiki_space(self)
+		self.wiki.track(
+			"Wiki Change Request",
+			frappe.get_doc(
+				{
+					"doctype": "Wiki Change Request",
+					"title": "A draft",
+					"wiki_space": space.name,
+					"status": "Draft",
+				}
+			).insert(ignore_permissions=True, ignore_mandatory=True),
+		)
+
+		self.assertEqual(get_space_stats([space.name])[space.name]["change_requests_in_review"], 0)
+
+	def test_a_space_with_no_documents_reports_zero(self):
+		from wiki.api.wiki_space import get_space_stats
+
+		space = create_test_wiki_space(self)
+		frappe.db.delete("Wiki Document", {"wiki_space": space.name})
+
+		stats = get_space_stats([space.name])[space.name]
+		self.assertEqual(stats["pages"], 0)
+		self.assertEqual(stats["change_requests_in_review"], 0)
+
+	def test_only_the_named_spaces_are_reported(self):
+		"""The directory asks about one page of spaces, not the whole wiki."""
+		from wiki.api.wiki_space import get_space_stats
+
+		asked = create_test_wiki_space(self)
+		other = create_test_wiki_space(self)
+
+		stats = get_space_stats([asked.name])
+		self.assertIn(asked.name, stats)
+		self.assertNotIn(other.name, stats)
+
+	def test_an_empty_request_is_answered_without_a_query(self):
+		from wiki.api.wiki_space import get_space_stats
+
+		self.assertEqual(get_space_stats([]), {})
 
 
-def create_wiki_document(parent: str, title: str, is_group: bool = False, content: str = ""):
-	"""Create a Wiki Document."""
-	doc = frappe.new_doc("Wiki Document")
-	doc.title = title
-	doc.parent_wiki_document = parent
-	doc.is_group = 1 if is_group else 0
-	doc.content = content
-	doc.insert()
-	return doc
+def create_test_wiki_space(test_case):
+	"""Create a test Wiki Space, tracked so it is deleted after the test.
+
+	Tracking rather than relying on the rollback in tearDown: many tests here
+	commit (the reorder and rebuild APIs do their own), and a committed space
+	survives the rollback.
+	"""
+	return test_case.wiki.space(space_name=f"Test Space {frappe.generate_hash(length=6)}")
+
+
+def create_wiki_document(test_case, parent: str, title: str, is_group: bool = False, content: str = ""):
+	"""Create a Wiki Document, tracked for cleanup."""
+	return test_case.wiki.document(parent=parent, title=title, is_group=is_group, content=content)
 
 
 def create_test_user(email: str, roles: list | None = None):
@@ -937,7 +1099,7 @@ def create_wiki_manager_user(email: str):
 	return create_test_user(email, roles=["Wiki Manager"])
 
 
-class TestWikiDocumentPermissions(FrappeTestCase):
+class TestWikiDocumentPermissions(WikiFixtureMixin, FrappeTestCase):
 	"""Tests for Wiki Document permission enforcement."""
 
 	def setUp(self):
@@ -949,8 +1111,8 @@ class TestWikiDocumentPermissions(FrappeTestCase):
 
 	def test_wiki_manager_can_edit_document_directly(self):
 		"""Test that Wiki Manager can edit documents directly via API."""
-		space = create_test_wiki_space()
-		page = create_wiki_document(space.root_group, "Test Page", content="Original content")
+		space = create_test_wiki_space(self)
+		page = create_wiki_document(self, space.root_group, "Test Page", content="Original content")
 
 		# Create a Wiki Manager user
 		manager = create_wiki_manager_user("manager@test.com")
@@ -965,8 +1127,8 @@ class TestWikiDocumentPermissions(FrappeTestCase):
 
 	def test_regular_user_cannot_edit_document_directly(self):
 		"""Test that regular user cannot edit documents directly."""
-		space = create_test_wiki_space()
-		page = create_wiki_document(space.root_group, "Test Page", content="Original content")
+		space = create_test_wiki_space(self)
+		page = create_wiki_document(self, space.root_group, "Test Page", content="Original content")
 
 		# Create a regular user (no Wiki Manager role)
 		user = create_test_user("regular@test.com")
@@ -979,8 +1141,8 @@ class TestWikiDocumentPermissions(FrappeTestCase):
 
 	def test_regular_user_cannot_delete_document(self):
 		"""Test that regular user cannot delete documents."""
-		space = create_test_wiki_space()
-		page = create_wiki_document(space.root_group, "Test Page")
+		space = create_test_wiki_space(self)
+		page = create_wiki_document(self, space.root_group, "Test Page")
 
 		user = create_test_user("deleter@test.com")
 		frappe.set_user(user.name)
@@ -990,7 +1152,7 @@ class TestWikiDocumentPermissions(FrappeTestCase):
 
 	def test_regular_user_cannot_create_document_directly(self):
 		"""Test that regular user cannot create documents directly."""
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		user = create_test_user("creator@test.com")
 		frappe.set_user(user.name)
@@ -1005,7 +1167,7 @@ class TestWikiDocumentPermissions(FrappeTestCase):
 
 	def test_wiki_manager_can_create_document(self):
 		"""Test that Wiki Manager can create documents."""
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		manager = create_wiki_manager_user("manager2@test.com")
 		frappe.set_user(manager.name)
@@ -1020,8 +1182,8 @@ class TestWikiDocumentPermissions(FrappeTestCase):
 
 	def test_wiki_manager_can_delete_document(self):
 		"""Test that Wiki Manager can delete documents."""
-		space = create_test_wiki_space()
-		page = create_wiki_document(space.root_group, "Page to Delete")
+		space = create_test_wiki_space(self)
+		page = create_wiki_document(self, space.root_group, "Page to Delete")
 
 		manager = create_wiki_manager_user("manager3@test.com")
 		frappe.set_user(manager.name)
@@ -1032,7 +1194,7 @@ class TestWikiDocumentPermissions(FrappeTestCase):
 		self.assertFalse(frappe.db.exists("Wiki Document", page_name))
 
 
-class TestWikiSpacePermissions(FrappeTestCase):
+class TestWikiSpacePermissions(WikiFixtureMixin, FrappeTestCase):
 	"""Tests for Wiki Space permission enforcement."""
 
 	def setUp(self):
@@ -1075,7 +1237,7 @@ class TestWikiSpacePermissions(FrappeTestCase):
 
 	def test_regular_user_cannot_modify_space_settings(self):
 		"""Test that regular user cannot modify space settings."""
-		space = create_test_wiki_space()
+		space = create_test_wiki_space(self)
 
 		user = create_test_user("spaceeditor@test.com")
 		frappe.set_user(user.name)
@@ -1083,3 +1245,73 @@ class TestWikiSpacePermissions(FrappeTestCase):
 		space.space_name = "Hacked Space Name"
 		with self.assertRaises(frappe.PermissionError):
 			space.save()
+
+
+class TestWikiWebpConversion(FrappeTestCase):
+	"""Tests for convert_file_to_webp."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self.webp_paths = []
+
+	def tearDown(self):
+		for path in self.webp_paths:
+			if os.path.exists(path):
+				os.remove(path)
+		frappe.db.rollback()
+
+	def upload_png(self, color, *, is_private=0):
+		from PIL import Image
+
+		buffer = BytesIO()
+		Image.new("RGB", (8, 8), color).save(buffer, "PNG")
+		return frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": "image.png",
+				"is_private": is_private,
+				"content": buffer.getvalue(),
+			}
+		).insert()
+
+	def test_same_named_upload_does_not_overwrite_earlier_webp(self):
+		"""Clipboard pastes all arrive as `image.png`, so their `.webp` names must not collide."""
+		from frappe.utils import get_files_path
+
+		from wiki.api import convert_file_to_webp
+
+		first_url = convert_file_to_webp(self.upload_png((255, 0, 0)))
+		second_url = convert_file_to_webp(self.upload_png((0, 0, 255)))
+		self.webp_paths = [get_files_path(url.split("/files/")[-1]) for url in (first_url, second_url)]
+
+		self.assertNotEqual(first_url, second_url)
+
+	def test_private_conversion_keeps_location_metadata_and_existing_image(self):
+		from pathlib import Path
+
+		from frappe.core.doctype.file.utils import get_content_hash
+		from frappe.utils import get_files_path
+
+		from wiki.api import convert_file_to_webp
+
+		first = self.upload_png((255, 0, 0), is_private=1)
+		second = self.upload_png((0, 0, 255), is_private=1)
+		original_paths = [Path(doc.get_full_path()) for doc in (first, second)]
+		convert_file_to_webp(first)
+		self.webp_paths.append(first.get_full_path())
+		first_content = Path(first.get_full_path()).read_bytes()
+		convert_file_to_webp(second)
+		self.webp_paths.append(second.get_full_path())
+
+		self.assertNotEqual(first.file_url, second.file_url)
+		self.assertEqual(Path(first.get_full_path()).read_bytes(), first_content)
+		for doc in (first, second):
+			doc.reload()
+			self.assertEqual(doc.is_private, 1)
+			self.assertTrue(doc.file_url.startswith("/private/files/"))
+			content = Path(doc.get_full_path()).read_bytes()
+			self.assertEqual(doc.content_hash, get_content_hash(content))
+			self.assertEqual(doc.file_size, len(content))
+			self.assertFalse(Path(get_files_path(doc.file_name)).exists())
+		for path in original_paths:
+			self.assertFalse(path.exists())
