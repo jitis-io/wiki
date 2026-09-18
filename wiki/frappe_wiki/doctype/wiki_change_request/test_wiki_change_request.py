@@ -2867,7 +2867,9 @@ class TestDeferredRevisionSync(WikiFixtureMixin, FrappeTestCase):
 		for i in range(3):
 			self.wiki.document(parent=self.space.root_group, title=f"Committed Page {i}")
 
-		frappe.db.commit()
+		# Exercise the real before_commit callback that batches revision snapshots.
+		# WikiFixtureMixin durably removes these committed fixtures after the test.
+		frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
 
 		self.assertEqual(self.space_revisions(), before + 1, "the commit should take exactly one snapshot")
 		self.assertFalse(_pending_revision_spaces())

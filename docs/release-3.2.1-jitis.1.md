@@ -50,9 +50,13 @@ compatibility workaround is now upstream behavior; the JITIS security filters
 and immediate stale-index removal remain.
 
 Upstream's Tiptap resolutions pin 3.29.2, which would regress the earlier
-GHSA-cp6q-959q-f8rh fix. All Tiptap direct dependencies and resolutions therefore
-remain aligned on 3.30.4, including the packages used by frappe-ui beta.55.
-Both real serializer regression paths (direct Core and StarterKit) are retained.
+GHSA-cp6q-959q-f8rh fix. A second current advisory,
+[GHSA-j95f-988m-3j2f](https://github.com/ueberdosis/tiptap/security/advisories/GHSA-j95f-988m-3j2f),
+also affects the previous 3.30.4 fork version. All Tiptap direct dependencies and
+resolutions are therefore aligned on the fixed 3.30.5, including the packages
+used by frappe-ui beta.55. Both real serializer regression paths (direct Core
+and StarterKit) are retained. Additional tests cover malformed Markdown
+attribute parsing and a bounded child-process check for the quadratic parser.
 No unrelated dependency-bot branch is merged.
 
 ## Validation and release boundary
@@ -64,13 +68,18 @@ The clean-bench gate covers ERPNext plus the security suites, and the complete
 Wiki suite on a separate clean site. Browser CI now pins the same Frappe release
 instead of the moving default branch. The integration test category is explicit.
 
-Local frontend tests passed (118, including callout and prototype-attribute
-regressions). Local Python lint and the CI/secret contracts were checked. The
+All 124 local frontend tests passed, covering callout, prototype-attribute
+and Markdown-attribute regressions. Local Python lint and the CI/secret contracts were checked. The
 prescribed local Docker quality, integration and cleanup commands were attempted,
 but Docker Desktop's Linux-engine pipe was unavailable; this is not a local
 integration pass. The PR must supply successful quality, clean-bench, security
 and browser CI at the final head. The release coordinator owns merge, tag,
 downstream lock, backup, migration and deployment.
+
+The optional native Windows frontend build was stopped after the upstream
+frappe-ui bench-discovery loop failed to terminate at a Windows drive root.
+The target Linux build is checked by clean-bench and browser CI; no local
+Windows dependency hotpatch is part of this release.
 
 Neither these local checks nor CI constitute production acceptance. After the
 immutable platform deployment, verify a permitted customer page and private
