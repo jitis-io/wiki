@@ -9,6 +9,8 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import now_datetime
 
+from wiki.api.search import search_pages
+from wiki.api.wiki_space import get_restricted_spaces, get_space_stats
 from wiki.frappe_wiki.doctype.wiki_change_request.wiki_change_request import (
 	create_change_request,
 	diff_change_request,
@@ -196,6 +198,45 @@ class TestTenantReadProtection(IntegrationTestCase):
 		)
 		with self.assertRaises(frappe.DoesNotExistError):
 			get_breadcrumbs(self.page_a.name)
+
+	def test_command_palette_search_preserves_tenant_and_tree_boundaries(self):
+		frappe.set_user(self.tenant_a_user)
+		names = {row.name for row in search_pages(self.token)}
+		self.assertIn(self.page_a.name, names)
+		self.assertNotIn(self.page_b.name, names)
+		self.assertNotIn(self.mismatched.name, names)
+		self.assertNotIn(self.orphan.name, names)
+
+		frappe.set_user(self.tenant_b_user)
+		names = {row.name for row in search_pages(self.token)}
+		self.assertIn(self.page_b.name, names)
+		self.assertNotIn(self.page_a.name, names)
+		self.assertNotIn(self.mismatched.name, names)
+
+	def test_new_directory_endpoints_exclude_other_tenant_and_portal_spaces(self):
+		portal_space = self._make_space("Portal", [("All", "Read")])
+		portal_space.portal_only = 1
+		portal_space.save(ignore_permissions=True)
+		portal_page = self._make_page(portal_space, "Portal secret")
+		requested = [self.space_a.name, self.space_b.name, portal_space.name]
+
+		frappe.set_user(self.tenant_a_user)
+		self.assertEqual(set(get_space_stats(requested)), {self.space_a.name})
+		self.assertEqual(set(get_restricted_spaces(requested)), {self.space_a.name})
+		self.assertNotIn(portal_page.name, {row.name for row in search_pages(self.token)})
+
+		frappe.set_user(self.tenant_b_user)
+		self.assertEqual(set(get_space_stats(requested)), {self.space_b.name})
+		self.assertEqual(set(get_restricted_spaces(requested)), {self.space_b.name})
+
+		frappe.set_user("Administrator")
+		self.assertIn(portal_space.name, get_restricted_spaces(requested))
+
+	def test_new_editor_endpoints_are_not_guest_whitelisted(self):
+		frappe.set_user("Guest")
+		for endpoint in (search_pages, get_space_stats, get_restricted_spaces):
+			with self.subTest(endpoint=endpoint.__name__), self.assertRaises(frappe.PermissionError):
+				frappe.is_whitelisted(endpoint)
 
 	def test_orphan_and_mismatched_documents_fail_closed_for_all_tenants(self):
 		for user in (self.tenant_a_user, self.tenant_b_user, "Guest"):

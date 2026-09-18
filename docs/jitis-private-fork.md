@@ -4,13 +4,17 @@ This repository is the canonical source for the JITIS Wiki privacy changes. The
 ERP platform consumes a reviewed release tag from the public `jitis-io/wiki`
 fork; it must not carry or apply a second copy of the privacy patch.
 
-## Production compatibility contract
+## Previous production compatibility contract
 
 - ERP platform `v4.2.14`
 - Frappe `v16.32.0` at `5cba016e86b54b57f34a3864282b92300ef20fb0`
 - ERPNext `v16.33.0` at `b24c9eba551905e256e336ff170a91a92d197a2f`
 - Wiki `3.0.0+jitis.9` at `af910c9af9044f70163522c90376da45eb5b1aa5`
 - Python 3.14, Node.js 24 and MariaDB 11.8
+
+The next reviewed sync candidate and its target Frappe/ERPNext pins are described
+in [release-3.2.1-jitis.1.md](release-3.2.1-jitis.1.md). Candidate tests do not update
+the production status above; only the platform release establishes deployment.
 
 The Wiki fork pipeline creates clean Frappe v16 benches and runs the privacy,
 permission, search-compatibility, and complete Wiki server suites. The exact

@@ -6,11 +6,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 EXPECTED_COMMITS = {
-	"FRAPPE_COMMIT": "5cba016e86b54b57f34a3864282b92300ef20fb0",
-	"ERPNEXT_COMMIT": "b24c9eba551905e256e336ff170a91a92d197a2f",
+	"FRAPPE_COMMIT": "c1f1e8ec3708750d7254f7f99d869ffb9886f19f",
+	"ERPNEXT_COMMIT": "12cd563fb9a79731f75ae2a45b1446a0a2dd9e74",
 }
 
-EXPECTED_WIKI_VERSION = "3.0.0+jitis.10"
+EXPECTED_WIKI_VERSION = "3.2.1+jitis.1"
 
 EXPECTED_ACTION_PINS = {
 	"actions/cache": ("0057852bfaa89a56745cba8c7296529d2fc39830", "v4.3.0"),
@@ -66,11 +66,13 @@ class CiContractTests(unittest.TestCase):
 		workflow = (ROOT / ".github" / "workflows" / "ui-tests.yml").read_text(encoding="utf-8")
 		push_block = workflow.split("push:", 1)[1].split("pull_request:", 1)[0]
 		self.assertIn("- jitis-v3", push_block)
+		self.assertIn("--frappe-branch v16.34.0", workflow)
+		self.assertIn(EXPECTED_COMMITS["FRAPPE_COMMIT"], workflow)
 
 	def test_release_tags_and_resolved_commits_are_verified(self):
-		self.assertIn("--frappe-branch v16.32.0", self.integration)
+		self.assertIn("--frappe-branch v16.34.0", self.integration)
 		self.assertIn('test "$(git -C apps/frappe rev-parse HEAD)" = "$FRAPPE_COMMIT"', self.integration)
-		self.assertIn("bench get-app --branch v16.33.0 --skip-assets erpnext", self.integration)
+		self.assertIn("bench get-app --branch v16.35.0 --skip-assets erpnext", self.integration)
 		self.assertIn('test "$(git -C apps/erpnext rev-parse HEAD)" = "$ERPNEXT_COMMIT"', self.integration)
 
 	def test_exact_private_tree_is_installed_and_fully_tested(self):
@@ -85,11 +87,11 @@ class CiContractTests(unittest.TestCase):
 			"run-tests --app wiki --module wiki.test_read_protection",
 			"run-tests --app wiki --module wiki.test_search_compatibility",
 			'"$WIKI_ONLY_SITE_NAME"',
-			"run-tests --app wiki\n",
+			"run-tests --app wiki --test-category all\n",
 		]
 		positions = [self.integration.index(command) for command in commands]
 		self.assertEqual(positions, sorted(positions))
-		self.assertEqual(self.integration.count("run-tests --app wiki\n"), 1)
+		self.assertEqual(self.integration.count("run-tests --app wiki --test-category all\n"), 1)
 
 	def test_private_attachment_hooks_and_patch_are_in_the_release_tree(self):
 		hooks = (ROOT / "wiki" / "hooks.py").read_text(encoding="utf-8")

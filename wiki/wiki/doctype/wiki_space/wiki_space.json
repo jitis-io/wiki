@@ -14,6 +14,11 @@
   "switcher_order",
   "column_break_bynr",
   "app_switcher_logo",
+  "space_icon",
+  "space_color",
+  "avatar",
+  "avatar_style",
+  "avatar_seed",
   "favicon",
   "enable_feedback_collection",
   "show_in_switcher",
@@ -34,9 +39,11 @@
   "allow_contributions",
   "version_3_tab",
   "root_group",
+  "enable_tabs",
   "home_tab_title",
   "home_tab_icon",
   "main_revision",
+  "last_edited",
   "git_sync_tab",
   "git_synced",
   "repo_full_name",
@@ -112,6 +119,38 @@
    "make_attachment_public": 0
   },
   {
+   "description": "A lucide class name from the curated picker list, e.g. lucide-book-open-text.",
+   "fieldname": "space_icon",
+   "fieldtype": "Data",
+   "label": "Space Icon"
+  },
+  {
+   "description": "Tint behind the space icon: one of gray, blue, green, amber, red, violet.",
+   "fieldname": "space_color",
+   "fieldtype": "Data",
+   "label": "Space Color"
+  },
+  {
+   "description": "Generated mark as an SVG data URI. Hidden because it is a wall of text in a form.",
+   "fieldname": "avatar",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Avatar"
+  },
+  {
+   "fieldname": "avatar_style",
+   "fieldtype": "Data",
+   "label": "Avatar Style",
+   "read_only": 1
+  },
+  {
+   "description": "Re-rolled by Shuffle. Stored so the same mark can be rebuilt from the style.",
+   "fieldname": "avatar_seed",
+   "fieldtype": "Data",
+   "label": "Avatar Seed",
+   "read_only": 1
+  },
+  {
    "fieldname": "favicon",
    "fieldtype": "Attach Image",
    "label": "Favicon"
@@ -181,17 +220,35 @@
    "read_only": 1
   },
   {
+   "description": "Newest save or merge of a page in this space. The sidebar orders spaces by it.",
+   "fieldname": "last_edited",
+   "fieldtype": "Datetime",
+   "label": "Last Edited",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "default": "0",
+   "description": "Deprecated: tabs were removed. Kept for backwards compatibility.",
+   "fieldname": "enable_tabs",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Enable Tabbed Navigation"
+  },
+  {
    "default": "Home",
-   "description": "Label for the synthetic Home tab that leads the space's tab bar.",
+   "description": "Deprecated: tabs were removed. Kept for backwards compatibility.",
    "fieldname": "home_tab_title",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Home Tab Title"
   },
   {
    "default": "lucide-house",
-   "description": "Lucide icon class for the Home tab, e.g. lucide-house.",
+   "description": "Deprecated: tabs were removed. Kept for backwards compatibility.",
    "fieldname": "home_tab_icon",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Home Tab Icon"
   },
   {
@@ -292,12 +349,12 @@
    "read_only": 1
   },
   {
+   "description": "The most recently loaded .wiki.json from the repo (empty when the structure is inferred).",
    "fieldname": "wiki_config",
    "fieldtype": "Code",
    "label": "Wiki Config (.wiki.json)",
    "options": "JSON",
-   "read_only": 1,
-   "description": "The most recently loaded .wiki.json from the repo (empty when the structure is inferred)."
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
