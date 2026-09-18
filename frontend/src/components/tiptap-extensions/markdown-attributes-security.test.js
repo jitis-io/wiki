@@ -40,11 +40,13 @@ for (const [consumer, core] of [
 		// A separate process makes a synchronous regex stall interruptible. The
 		// fixed scanner completes these inputs in milliseconds; the old quadratic
 		// parser exceeds this generous five-second budget on the same input.
+		const coreSource =
+			consumer === 'Wiki extensions' ? 'direct' : "require('@tiptap/core')";
 		const source = `
 			import { createRequire } from 'node:module';
 			import * as direct from '@tiptap/core';
 			const require = createRequire(import.meta.resolve('@tiptap/starter-kit'));
-			const core = ${consumer === 'Wiki extensions' ? 'direct' : "require('@tiptap/core')"};
+			const core = ${coreSource};
 			const block = '__QUOTED_0'.repeat(16384) + '__QUOTED_0__';
 			const inline = '0'.repeat(131072);
 			const lexer = { blockTokens: () => [], inlineTokens: () => [] };
