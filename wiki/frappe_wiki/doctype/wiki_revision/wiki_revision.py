@@ -7,6 +7,7 @@ import hashlib
 from typing import Any
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 from frappe.website.utils import cleanup_page_name
@@ -28,7 +29,7 @@ def create_revision_from_live_tree(
 	from wiki.permissions import can_write_space
 
 	if not ignore_permissions and not can_write_space(wiki_space):
-		frappe.throw("Not permitted", frappe.PermissionError)
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
 	# Raw revision records are manager-only. This internal snapshot builder
 	# authorizes the owning space before persisting its implementation details.
 	space = frappe.get_doc("Wiki Space", wiki_space)
