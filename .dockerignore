@@ -1,0 +1,13 @@
+# CI installs its own Linux dependencies from the lockfiles.
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.pyc
+playwright-report
+test-results
+.env
+.env.*
+!.env.example
+# Keep .git: Bench verifies and installs the exact local source repository.

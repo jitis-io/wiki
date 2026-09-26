@@ -379,7 +379,8 @@ def _create_cr_item(
 	item.is_deleted = 0
 	# An author-supplied route always wins, but is never trusted verbatim.
 	item.route = sanitize_route(route) if route else _compute_cr_route(cr, parent_key, item.slug, item_map)
-	item.insert()
+	# The caller has checked the CR write permission and editable state.
+	item.insert(ignore_permissions=True)
 	return item.doc_key
 
 
@@ -424,7 +425,7 @@ def _update_cr_item(
 	# when the page is created and owns it from then on. Moving it is an explicit
 	# `route` edit, never a side effect of renaming.
 
-	item.save()
+	item.save(ignore_permissions=True)
 	return item.doc_key
 
 
@@ -442,7 +443,7 @@ def _set_cr_item_deleted(cr: Document, doc_key: str, is_deleted: bool) -> list[s
 	flag = 1 if is_deleted else 0
 	item = frappe.get_doc("Wiki Revision Item", item_name)
 	item.is_deleted = flag
-	item.save()
+	item.save(ignore_permissions=True)
 
 	affected = [doc_key]
 	effective_items = get_effective_revision_item_map(cr.head_revision)
@@ -483,7 +484,7 @@ def _move_cr_item(
 	item.parent_key = parent_key
 	if order_index is not None:
 		item.order_index = order_index
-	item.save()
+	item.save(ignore_permissions=True)
 	return item.doc_key
 
 
@@ -2474,6 +2475,8 @@ def with_content_blob(item: dict[str, Any] | None, content: str) -> dict[str, An
 
 
 def create_merge_revision(cr: Document, merged_items: dict[str, dict[str, Any]]) -> Document:
+	if not _can_merge(cr.wiki_space):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
 	revision = frappe.new_doc("Wiki Revision")
 	revision.wiki_space = cr.wiki_space
 	revision.change_request = cr.name
@@ -2483,7 +2486,7 @@ def create_merge_revision(cr: Document, merged_items: dict[str, dict[str, Any]])
 	revision.is_working = 0
 	revision.created_by = frappe.session.user
 	revision.created_at = now_datetime()
-	revision.insert()
+	revision.insert(ignore_permissions=True)
 
 	for item in merged_items.values():
 		new_item = frappe.new_doc("Wiki Revision Item")
@@ -2502,7 +2505,7 @@ def create_merge_revision(cr: Document, merged_items: dict[str, dict[str, Any]])
 		new_item.order_index = item.get("order_index")
 		new_item.content_blob = item.get("content_blob")
 		new_item.is_deleted = 0
-		new_item.insert()
+		new_item.insert(ignore_permissions=True)
 
 	recompute_revision_hashes(revision.name)
 	return revision

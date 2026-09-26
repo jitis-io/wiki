@@ -25,6 +25,12 @@ def create_revision_from_live_tree(
 	is_merge: int = 0,
 	ignore_permissions: bool = False,
 ) -> Document:
+	from wiki.permissions import can_write_space
+
+	if not ignore_permissions and not can_write_space(wiki_space):
+		frappe.throw("Not permitted", frappe.PermissionError)
+	# Raw revision records are manager-only. This internal snapshot builder
+	# authorizes the owning space before persisting its implementation details.
 	space = frappe.get_doc("Wiki Space", wiki_space)
 	root = frappe.get_doc("Wiki Document", space.root_group)
 
@@ -74,7 +80,7 @@ def create_revision_from_live_tree(
 	revision.is_working = 1 if is_working else 0
 	revision.created_by = frappe.session.user
 	revision.created_at = now_datetime()
-	revision.insert(ignore_permissions=ignore_permissions)
+	revision.insert(ignore_permissions=True)
 
 	for doc in docs:
 		content = doc.get("content") or ""
@@ -95,7 +101,7 @@ def create_revision_from_live_tree(
 		item.order_index = doc.get("sort_order") or 0
 		item.content_blob = content_blob
 		item.is_deleted = 0
-		item.insert(ignore_permissions=ignore_permissions)
+		item.insert(ignore_permissions=True)
 
 	recompute_revision_hashes(revision.name)
 	return revision

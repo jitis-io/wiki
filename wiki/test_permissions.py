@@ -21,7 +21,7 @@ from wiki.permissions import (
 	wiki_document_has_permission,
 	wiki_space_has_permission,
 )
-from wiki.tests.factory import make_space
+from wiki.tests.factory import make_document, make_space
 
 
 def _set_contributions(space: str, allow: bool) -> None:
@@ -82,6 +82,7 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 		frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
 
 	def setUp(self):
+		self._native_document_editor = False
 		self._docs = []
 		self._spaces = []
 		# A space gated to the reader (Read) and writer (Write) roles.
@@ -98,6 +99,9 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
+		if self._native_document_editor:
+			frappe.permissions.reset_perms("Wiki Document")
+			frappe.clear_cache(doctype="Wiki Document")
 		for space in self._spaces:
 			if frappe.db.exists("Wiki Space", space):
 				frappe.delete_doc("Wiki Space", space, force=True)
@@ -151,6 +155,174 @@ class TestWikiSpacePermissions(IntegrationTestCase):
 		self.assertFalse(can_read_space(self.portal_only, self.reader))
 		self.assertFalse(can_write_space(self.portal_only, self.writer))
 		self.assertFalse(can_read_space(self.portal_only, "Guest"))
+
+	def test_unsaved_portal_flag_cannot_bypass_persisted_read_boundary(self):
+		doc = frappe.get_doc("Wiki Space", self.portal_only)
+		doc.portal_only = 0
+		self.assertFalse(can_read_space(doc, self.reader))
+		self.assertFalse(wiki_space_has_permission(doc, "read", self.reader))
+		self.assertFalse(can_read_space(doc, "Guest"))
+
+	def test_native_approver_cannot_clear_another_customers_portal_boundary(self):
+		from frappe.client import set_value
+
+		# Portal spaces with no native roles remain manager-only, even though an
+		# ordinary open space would otherwise be writable by any Wiki Approver.
+		frappe.db.set_value("Wiki Space", self.open_space, "portal_only", 1)
+		frappe.clear_document_cache("Wiki Space", self.open_space)
+		frappe.set_user(self.approver)
+		with self.assertRaises(frappe.PermissionError):
+			set_value("Wiki Space", self.open_space, {"portal_only": 0})
+		self.assertEqual(frappe.db.get_value("Wiki Space", self.open_space, "portal_only"), 1)
+
+	def test_manager_can_explicitly_clear_portal_boundary(self):
+		from frappe.client import set_value
+
+		frappe.set_user(self.manager)
+		set_value("Wiki Space", self.portal_only, {"portal_only": 0})
+		self.assertEqual(frappe.db.get_value("Wiki Space", self.portal_only, "portal_only"), 0)
+
+	def _grant_native_document_editing(self):
+		# Stock Wiki Approvers edit via CRs, not direct document saves. Exercise
+		# the supported custom Desk permission case without granting manager
+		# access, which would intentionally bypass the customer boundary.
+		self.assertFalse(frappe.db.exists("Custom DocPerm", {"parent": "Wiki Document"}))
+		self._native_document_editor = True
+		frappe.permissions.add_permission("Wiki Document", "Wiki Approver", ptype="write")
+		frappe.permissions.update_permission_property("Wiki Document", "Wiki Approver", 0, "create", 1)
+		frappe.clear_cache(doctype="Wiki Document")
+
+	def test_native_save_cannot_move_a_document_into_another_customers_space(self):
+		from frappe.client import set_value
+
+		self._grant_native_document_editing()
+
+		own_root = frappe.db.get_value("Wiki Space", self.open_space, "root_group")
+		foreign_root = frappe.db.get_value("Wiki Space", self.portal_only, "root_group")
+		doc = make_document(parent=own_root, title="Own document")
+		frappe.set_user(self.approver)
+		with self.assertRaises(frappe.PermissionError):
+			set_value("Wiki Document", doc.name, {"parent_wiki_document": foreign_root})
+		self.assertEqual(frappe.db.get_value("Wiki Document", doc.name, "parent_wiki_document"), own_root)
+
+	def test_native_space_editor_cannot_adopt_another_customers_subtree(self):
+		from frappe.client import set_value
+
+		own_root = frappe.db.get_value("Wiki Space", self.open_space, "root_group")
+		foreign_root = frappe.db.get_value("Wiki Space", self.portal_only, "root_group")
+		foreign_group = make_document(parent=foreign_root, title="Foreign subtree", is_group=1)
+		frappe.set_user(self.approver)
+		with self.assertRaises(frappe.PermissionError):
+			set_value("Wiki Space", self.open_space, {"root_group": foreign_group.name})
+		self.assertEqual(frappe.db.get_value("Wiki Space", self.open_space, "root_group"), own_root)
+
+	def test_native_insert_cannot_forge_the_space_of_a_foreign_parent(self):
+		self._grant_native_document_editing()
+
+		foreign_root = frappe.db.get_value("Wiki Space", self.portal_only, "root_group")
+		frappe.set_user(self.approver)
+		doc = frappe.get_doc(
+			{
+				"doctype": "Wiki Document",
+				"title": "Forged destination",
+				"wiki_space": self.open_space,
+				"parent_wiki_document": foreign_root,
+			}
+		)
+		with self.assertRaises(frappe.PermissionError):
+			doc.insert()
+
+	def test_reorder_rejects_foreign_parent_and_siblings_before_writing(self):
+		from wiki.api.wiki_space import reorder_wiki_documents
+
+		self._grant_native_document_editing()
+
+		own_root = frappe.db.get_value("Wiki Space", self.open_space, "root_group")
+		foreign_root = frappe.db.get_value("Wiki Space", self.portal_only, "root_group")
+		own = make_document(parent=own_root, title="Own reorder document")
+		foreign = make_document(parent=foreign_root, title="Foreign reorder document", sort_order=7)
+		frappe.set_user(self.approver)
+		with self.assertRaises(frappe.PermissionError):
+			reorder_wiki_documents(own.name, foreign_root, 0, frappe.as_json([own.name]))
+		with self.assertRaises(frappe.PermissionError):
+			reorder_wiki_documents(own.name, own_root, 0, frappe.as_json([foreign.name, own.name]))
+		self.assertEqual(frappe.db.get_value("Wiki Document", own.name, "parent_wiki_document"), own_root)
+		self.assertEqual(frappe.db.get_value("Wiki Document", foreign.name, "sort_order"), 7)
+
+	def _make_private_history(self):
+		from wiki.frappe_wiki.doctype.wiki_change_request.wiki_change_request import create_change_request
+
+		foreign_root = frappe.db.get_value("Wiki Space", self.portal_only, "root_group")
+		make_document(parent=foreign_root, title="Private history", content="Synthetic customer B history")
+		cr = create_change_request(self.portal_only, "Private change request")
+		item = frappe.get_all(
+			"Wiki Revision Item", filters={"revision": cr.base_revision}, fields=["name", "content_blob"]
+		)[0]
+		conflict = frappe.get_doc(
+			{
+				"doctype": "Wiki Merge Conflict",
+				"change_request": cr.name,
+				"doc_key": "private-test",
+				"conflict_type": "content",
+				"ours_payload": "{}",
+				"theirs_payload": "{}",
+			}
+		).insert(ignore_permissions=True)
+		return cr, {
+			"Wiki Revision": cr.base_revision,
+			"Wiki Revision Item": item.name,
+			"Wiki Content Blob": item.content_blob,
+			"Wiki Merge Conflict": conflict.name,
+		}
+
+	def test_native_approver_cannot_read_or_mutate_private_revision_internals(self):
+		from frappe.client import get, set_value
+
+		_cr, records = self._make_private_history()
+		frappe.set_user(self.approver)
+		for doctype, name in records.items():
+			with self.subTest(doctype=doctype):
+				with self.assertRaises(frappe.PermissionError):
+					get(doctype, name)
+				self.assertEqual(frappe.get_list(doctype, filters={"name": name}, pluck="name"), [])
+				with self.assertRaises(frappe.PermissionError):
+					set_value(doctype, name, {"owner": self.approver})
+
+	def test_native_approver_cannot_relabel_private_cr_or_attach_foreign_history(self):
+		from frappe.client import set_value
+
+		from wiki.frappe_wiki.doctype.wiki_change_request.wiki_change_request import create_change_request
+
+		foreign, _records = self._make_private_history()
+		own = create_change_request(self.open_space, "Owned change request")
+		frappe.set_user(self.approver)
+		for doctype, name, values in (
+			("Wiki Change Request", foreign.name, {"wiki_space": self.open_space}),
+			("Wiki Change Request", own.name, {"head_revision": foreign.head_revision}),
+			("Wiki Space", self.open_space, {"main_revision": foreign.base_revision}),
+		):
+			with self.subTest(doctype=doctype, values=values):
+				with self.assertRaises(frappe.PermissionError):
+					set_value(doctype, name, values)
+		self.assertEqual(
+			frappe.db.get_value("Wiki Change Request", foreign.name, "wiki_space"), self.portal_only
+		)
+		self.assertEqual(
+			frappe.db.get_value("Wiki Change Request", own.name, "head_revision"), own.head_revision
+		)
+
+	def test_native_approver_can_reorder_owned_documents(self):
+		from wiki.api.wiki_space import reorder_wiki_documents
+
+		self._grant_native_document_editing()
+
+		own_root = frappe.db.get_value("Wiki Space", self.open_space, "root_group")
+		first = make_document(parent=own_root, title="First owned document")
+		second = make_document(parent=own_root, title="Second owned document")
+		frappe.set_user(self.approver)
+		reorder_wiki_documents(second.name, own_root, 0, frappe.as_json([second.name, first.name]))
+		self.assertEqual(frappe.db.get_value("Wiki Document", second.name, "sort_order"), 0)
+		self.assertEqual(frappe.db.get_value("Wiki Document", first.name, "sort_order"), 1)
 
 	# --- can_write_space -------------------------------------------------
 

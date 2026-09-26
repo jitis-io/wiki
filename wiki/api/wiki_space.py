@@ -254,6 +254,12 @@ def reorder_wiki_documents(
 	from wiki.permissions import assert_space_writable
 
 	siblings_list = json.loads(siblings) if isinstance(siblings, str) else siblings
+	if (
+		not isinstance(siblings_list, list)
+		or any(not isinstance(name, str) or not name for name in siblings_list)
+		or len(set(siblings_list)) != len(siblings_list)
+	):
+		frappe.throw(_("Invalid document order"), frappe.ValidationError)
 
 	doc = frappe.get_doc("Wiki Document", doc_name)
 
@@ -265,6 +271,26 @@ def reorder_wiki_documents(
 
 	# Direct reorder for users with write permission
 	parent_changed = doc.parent_wiki_document != new_parent
+	if parent_changed:
+		# Check the proposed parent through the same permission hook as a REST
+		# save before any raw database writes occur.
+		doc.parent_wiki_document = new_parent
+		doc.check_permission("write")
+		if new_parent:
+			parent = frappe.get_doc("Wiki Document", new_parent)
+			parent.check_permission("write")
+			if not parent.is_group:
+				frappe.throw(_("The destination must be a group"), frappe.ValidationError)
+
+	# The browser supplies this list. Every persisted row must be an authorized
+	# sibling in the destination, not an arbitrary document from another space.
+	for name in siblings_list:
+		if name.startswith("temp_") or name == doc.name:
+			continue
+		sibling = frappe.get_doc("Wiki Document", name)
+		sibling.check_permission("write")
+		if sibling.parent_wiki_document != new_parent:
+			frappe.throw(_("Document order contains a different parent"), frappe.PermissionError)
 
 	frappe.flags.in_reorder_wiki_documents = True
 	try:
@@ -400,6 +426,9 @@ def _sync_main_revision_for_space(space_name: str | None) -> None:
 		space.name,
 		message="Direct reorder",
 		parent_revision=space.main_revision,
+		# The queued document mutation was authorized before scheduling this
+		# internal snapshot, which may be flushed after the session changes.
+		ignore_permissions=True,
 	)
 	frappe.db.set_value("Wiki Space", space.name, "main_revision", revision.name)
 

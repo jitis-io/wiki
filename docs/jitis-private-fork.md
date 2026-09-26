@@ -23,6 +23,20 @@ production combination above is additionally installed and tested by the
 private attachment migration, public-file cloning, rollback/idempotency,
 role-controlled private files, anonymous access, and the SQLite search API.
 
+## Native history boundary
+
+Revision records, revision items, shared content blobs and merge conflicts are
+internal implementation records. Direct Desk/REST access is restricted to Wiki
+Managers and System Managers; ordinary contributors use the existing
+space-authorized change-request APIs. Generic saves cannot replace a stored
+portal-only boundary, adopt another space's root, or attach foreign revision
+history. Direct document editing with custom Desk permissions must authorize
+both the source and destination trees before changing either.
+
+The 2026-09-26 review candidate is checked against Frappe 16.35.0 and ERPNext
+16.36.0. It retains the released Wiki 3.2.1 base; a new reviewed JITIS tag and
+updated downstream pins are still required before deployment.
+
 ## Downstream consumption
 
 The ERP platform stores an exact semantic release tag in

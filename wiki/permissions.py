@@ -157,8 +157,11 @@ def is_portal_only_space(space) -> bool:
 	name = _resolve_space_name(space)
 	if not name:
 		return False
-	if not isinstance(space, str) and hasattr(space, "portal_only"):
-		return bool(space.portal_only)
+	# Frappe applies incoming field changes before checking save permission.
+	# A caller must not clear the persisted portal boundary in the same request
+	# whose authorization depends on that boundary. Also honor a newly set flag.
+	if not isinstance(space, str) and bool(getattr(space, "portal_only", False)):
+		return True
 	return bool(frappe.get_cached_value("Wiki Space", name, "portal_only"))
 
 
@@ -391,6 +394,17 @@ def wiki_space_query_conditions(user=None, doctype=None):
 def wiki_space_has_permission(doc, ptype, user=None):
 	user = user or frappe.session.user
 	if ptype in WRITE_PTYPES:
+		if not _is_manager(user):
+			# The root determines ownership of an entire tree, including delete
+			# cascades. A space editor must not adopt another customer's subtree
+			# by changing the Link field in a generic REST request.
+			stored_root = frappe.db.get_value("Wiki Space", doc.name, "root_group") if doc.name else None
+			if (doc.get("root_group") or None) != (stored_root or None):
+				return False
+		main_revision = doc.get("main_revision")
+		if main_revision and not _is_manager(user):
+			if frappe.db.get_value("Wiki Revision", main_revision, "wiki_space") != doc.name:
+				return False
 		return can_write_space(doc, user)
 	return can_read_space(doc, user)
 
@@ -420,6 +434,18 @@ def wiki_document_has_permission(doc, ptype, user=None):
 		return _is_manager(user)
 
 	if ptype in WRITE_PTYPES:
+		# A generic REST save may replace the parent before the permission hook
+		# runs. Authorize the persisted source AND the proposed destination tree;
+		# a caller-supplied wiki_space must never authorize a foreign parent.
+		parent = doc.get("parent_wiki_document")
+		if parent:
+			target_space = resolve_document_space(parent)
+			if not target_space or not can_write_space(target_space, user):
+				return False
+			if is_new and space != target_space:
+				return False
+			if not frappe.flags.in_apply_merge_revision and is_git_synced_space(target_space):
+				return False
 		# A git-synced space is read-only; only the sync engine (running under
 		# in_apply_merge_revision) may write its documents.
 		if not frappe.flags.in_apply_merge_revision and is_git_synced_space(space):
@@ -432,6 +458,18 @@ def wiki_document_has_permission(doc, ptype, user=None):
 	return can_read_document(doc, user)
 
 
+def wiki_internal_query_conditions(user=None, doctype=None):
+	"""Revision internals are exposed only through the space-authorized APIs."""
+	return "" if _is_manager(user or frappe.session.user) else "1=0"
+
+
+def wiki_internal_has_permission(doc, ptype, user=None):
+	# Content blobs are shared by hash, so they have no single tenant owner.
+	# Direct REST access would bypass the CR/space checks and can also forge
+	# cross-space revision links. Native managers retain repair access.
+	return _is_manager(user or frappe.session.user)
+
+
 def wiki_cr_query_conditions(user=None, doctype=None):
 	user = user or frappe.session.user
 	if _is_manager(user):
@@ -442,8 +480,18 @@ def wiki_cr_query_conditions(user=None, doctype=None):
 def wiki_cr_has_permission(doc, ptype, user=None):
 	user = user or frappe.session.user
 	space = doc.wiki_space
+	if doc.name and frappe.db.exists("Wiki Change Request", doc.name):
+		stored_space = frappe.db.get_value("Wiki Change Request", doc.name, "wiki_space")
+		if space != stored_space:
+			return False
 	if not space:
 		return _is_manager(user)
+	# Standard REST saves must not attach a readable CR to another customer's
+	# history; all controller-generated revision links stay in the same space.
+	for field in ("base_revision", "head_revision", "merge_revision"):
+		revision = doc.get(field)
+		if revision and frappe.db.get_value("Wiki Revision", revision, "wiki_space") != space:
+			return False
 
 	# Reading a CR requires space Read. Editing/saving it (proposing changes)
 	# additionally requires the space to accept contributions (Write-tier users
