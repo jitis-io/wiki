@@ -98,8 +98,8 @@ jobs:
       - name: Setup Bench
         run: |
           pip install frappe-bench
-          bench init --frappe-branch v16.34.0 --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
-          test "$(git -C ~/frappe-bench/apps/frappe rev-parse HEAD)" = "c1f1e8ec3708750d7254f7f99d869ffb9886f19f"
+          bench init --frappe-branch v16.35.0 --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
+          test "$(git -C ~/frappe-bench/apps/frappe rev-parse HEAD)" = "012667b9c4e7f66d5e1ff5858d2e922331d4300a"
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
 

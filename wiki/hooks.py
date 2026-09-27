@@ -104,12 +104,20 @@ after_migrate = [
 # Permissions evaluated in scripted ways
 
 permission_query_conditions = {
+	"Wiki Revision": "wiki.permissions.wiki_internal_query_conditions",
+	"Wiki Revision Item": "wiki.permissions.wiki_internal_query_conditions",
+	"Wiki Content Blob": "wiki.permissions.wiki_internal_query_conditions",
+	"Wiki Merge Conflict": "wiki.permissions.wiki_internal_query_conditions",
 	"Wiki Space": "wiki.permissions.wiki_space_query_conditions",
 	"Wiki Document": "wiki.permissions.wiki_document_query_conditions",
 	"Wiki Change Request": "wiki.permissions.wiki_cr_query_conditions",
 }
 
 has_permission = {
+	"Wiki Revision": "wiki.permissions.wiki_internal_has_permission",
+	"Wiki Revision Item": "wiki.permissions.wiki_internal_has_permission",
+	"Wiki Content Blob": "wiki.permissions.wiki_internal_has_permission",
+	"Wiki Merge Conflict": "wiki.permissions.wiki_internal_has_permission",
 	"Wiki Space": "wiki.permissions.wiki_space_has_permission",
 	"Wiki Document": "wiki.permissions.wiki_document_has_permission",
 	"Wiki Change Request": "wiki.permissions.wiki_cr_has_permission",

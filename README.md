@@ -19,6 +19,10 @@
 
 ## Frappe Wiki
 
+For the maintained JITIS fork, see the [release and ownership guide](docs/jitis-private-fork.md),
+the [3.2.1+jitis.2 release scope](docs/release-3.2.1-jitis.2.md), and the
+[customer documentation workflow and templates](docs/customer-documentation/README.md).
+
 Frappe Wiki is an Open Source Wiki app built on the Frappe Framework. It is well suited to serve dynamic, text-heavy content like documentation and knowledge base. It allows publishing small changes and even new pages on the fly without downtime. It also maintains revision history and has a change approval mechanism.
 
 <details>
