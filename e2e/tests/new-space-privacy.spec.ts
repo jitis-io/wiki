@@ -24,6 +24,9 @@ for (const publicSpace of [false, true]) {
 				.fill(route);
 			await dialog.getByRole('button', { name: 'Create', exact: true }).click();
 			await expect(page).toHaveURL(SPACE_URL_RE);
+			// Space initialization can still write its first revision after the
+			// URL changes. Finish it before inserting a page through another request.
+			await page.waitForLoadState('networkidle');
 			const spaceId = page.url().split('/spaces/')[1].split(/[/?#]/)[0];
 			wiki.adopt(spaceId);
 			const space = await getDoc<{
