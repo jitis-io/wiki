@@ -1,5 +1,8 @@
 <template>
 	<div class="flex flex-col gap-4">
+		<Badge v-if="isPortalOnly" class="self-start" theme="blue">
+			{{ __('Customer portal') }}
+		</Badge>
 		<!-- Add role, above the table. The list is searched on the server as you
 		     type — a site can have far more roles than fit in one page, so a
 		     client-side filter over the first page would hide most of them.
@@ -73,7 +76,9 @@
 							colspan="3"
 							class="px-3 py-6 text-center text-xs text-ink-gray-5"
 						>
-							{{ __('No roles configured (open to all logged-in users).') }}
+							{{ isPortalOnly
+								? __('No Wiki roles configured. Customer access is controlled by portal access grants.')
+								: __('No roles configured (open to all logged-in users).') }}
 						</td>
 					</tr>
 				</tbody>
@@ -82,7 +87,9 @@
 
 		<!-- Helper message, below the table -->
 		<p class="text-xs text-ink-gray-5">
-			{{ __('Readable by all logged-in users if no roles are set. Add the Guest role for public/anonymous access.') }}
+			{{ isPortalOnly
+				? __('Customer portal access is controlled by portal access grants. Wiki roles, including Guest, do not grant customer access.')
+				: __('Readable by all logged-in users if no roles are set. Add the Guest role for public/anonymous access.') }}
 		</p>
 		<p v-if="!canManageAccess" class="text-xs text-ink-gray-5">
 			{{ __('Only space admins can change access control.') }}
@@ -168,6 +175,7 @@ const enableFeedbackCollection = ref(false);
 const savingFeedback = ref(false);
 // Git-synced spaces are read-only; the toggle is moot and the server rejects it.
 const isGitSynced = computed(() => Boolean(props.space.doc?.git_synced));
+const isPortalOnly = computed(() => Boolean(props.space.doc?.portal_only));
 
 const contributionsDescription = computed(() => {
 	const base = __(

@@ -47,6 +47,13 @@
 
 				<FormControl
 					type="checkbox"
+					:label="__('Customer portal only')"
+					v-model="newSpace.portal_only"
+					:description="__('Private until configured for authorized portal customers. Uncheck to create a public wiki space.')"
+				/>
+
+				<FormControl
+					type="checkbox"
 					:label="__('Synced from GitHub?')"
 					v-model="newSpace.git_synced"
 				/>
@@ -240,6 +247,7 @@ watch(isOpen, async (open) => {
 const newSpace = reactive({
 	space_name: '',
 	route: '',
+	portal_only: true,
 	git_synced: false,
 	github_installation_id: '',
 	repo_full_name: '',
@@ -516,6 +524,7 @@ function resetForm() {
 	Object.assign(identity, emptyIdentity());
 	newSpace.space_name = '';
 	newSpace.route = '';
+	newSpace.portal_only = true;
 	newSpace.git_synced = false;
 	newSpace.github_installation_id = '';
 	newSpace.repo_full_name = '';
@@ -567,10 +576,11 @@ const handleCreateSpace = async () => {
 		...identity,
 		space_name: newSpace.space_name,
 		route: newSpace.route,
-		// New spaces are published by default, so start them as public read.
-		// Guest covers everyone (anonymous + logged-in); admins can refine this
-		// in Space Settings → Permissions.
-		roles: [{ role: 'Guest', permission_level: 'Read' }],
+		// Customer documentation stays protected before portal setup is complete.
+		portal_only: newSpace.portal_only ? 1 : 0,
+		roles: newSpace.portal_only
+			? []
+			: [{ role: 'Guest', permission_level: 'Read' }],
 	};
 
 	if (newSpace.git_synced) {

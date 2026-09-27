@@ -14,7 +14,7 @@ fork; it must not carry or apply a second copy of the privacy patch.
 
 This is historical deployment evidence, not a statement of the current live
 version. The maintained release candidate and its target pins are described in
-[release-3.2.1-jitis.2.md](release-3.2.1-jitis.2.md); the preceding upstream sync
+[release-3.2.1-jitis.3.md](release-3.2.1-jitis.3.md); the preceding upstream sync
 is recorded in [release-3.2.1-jitis.1.md](release-3.2.1-jitis.1.md).
 Only the platform deployment establishes which version is live.
 
@@ -35,7 +35,7 @@ portal-only boundary, adopt another space's root, or attach foreign revision
 history. Direct document editing with custom Desk permissions must authorize
 both the source and destination trees before changing either.
 
-Release candidate 3.2.1+jitis.2 is checked against Frappe 16.35.0 and ERPNext
+Release candidate 3.2.1+jitis.3 targets Frappe 16.35.0 and ERPNext
 16.36.0. It retains the released Wiki 3.2.1 base. App review, an immutable tag and
 updated downstream pins are required before deployment.
 
@@ -46,6 +46,31 @@ the everyday workflow and reusable inventory, operating-instruction and network
 plan templates. The approved Wiki page is the customer view; editable source
 files stay in the internal SharePoint customer folder. These are documentation
 conventions, not an additional synchronization service or authorization layer.
+
+## Architecture and fork boundary
+
+| Part | Responsibility |
+| --- | --- |
+| `frontend/` | Upstream Vue/TipTap editor, page tree, drafts and review. |
+| `wiki/frappe_wiki/` | Current v3 documents, revisions, content blobs and change requests on Frappe/MariaDB. |
+| `wiki/wiki/` | Shared space/settings and Markdown rendering, plus legacy records and migration compatibility. This directory is not obsolete as a whole. |
+| `wiki/privacy.py`, `wiki/permissions.py` | Native portal-only space boundary, private assets, tree ownership and protected history. |
+| JPI `identity.py`, `portal_api/wiki.py` | Validated person/customer/grant, one mapped space, authorized published tree/page/file responses. |
+| Portal documentation modules | Customer navigation, safe HTML rendering and authorized asset proxy. |
+
+The customer does not get a second Wiki account or an embedded copy of the
+editor. The portal calls JPI from its server and renders the permitted published
+content. Titles and routes are presentation; explicit customer/space mappings
+and grants control access. The native SQLite search index is a derived Wiki
+search facility, not a second customer record database. Portal page search is
+currently limited to the titles/routes of the already authorized tree.
+
+Keep upstream groups, revision storage and migration code even when the daily
+workflow does not use every feature. Removing them would enlarge the fork and
+complicate future merges. Do not introduce a second authorization system, a
+diagram synchronization service, per-customer databases or a custom tab model
+for this documentation workflow. Git Sync remains an upstream capability; it
+does not need to be configured for customer spaces.
 
 ## Downstream consumption
 
