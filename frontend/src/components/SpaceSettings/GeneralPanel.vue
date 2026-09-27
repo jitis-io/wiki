@@ -25,8 +25,12 @@
 		</SettingsRow>
 
 		<SettingsRow
-			:title="__('Published')"
-			:description="__('Make this wiki space publicly accessible')"
+			:title="isPortalOnly ? __('Published in customer portal') : __('Published')"
+			:description="
+				isPortalOnly
+					? __('Published pages are available to authorized portal customers. This space is not publicly accessible.')
+					: __('Make this wiki space publicly accessible')
+			"
 		>
 			<Switch
 				v-model="isPublished"
@@ -79,6 +83,7 @@ const spaceName = ref('');
 const savingName = ref(false);
 const isPublished = ref(true);
 const updatingPublishSetting = ref(false);
+const isPortalOnly = computed(() => Boolean(props.space.doc?.portal_only));
 
 // Renaming the space never moves its pages — the route is changed on purpose,
 // through the flow next to it, because every published URL depends on it.
