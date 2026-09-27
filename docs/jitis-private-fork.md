@@ -12,13 +12,15 @@ fork; it must not carry or apply a second copy of the privacy patch.
 - Wiki `3.0.0+jitis.9` at `af910c9af9044f70163522c90376da45eb5b1aa5`
 - Python 3.14, Node.js 24 and MariaDB 11.8
 
-The next reviewed sync candidate and its target Frappe/ERPNext pins are described
-in [release-3.2.1-jitis.1.md](release-3.2.1-jitis.1.md). Candidate tests do not update
-the production status above; only the platform release establishes deployment.
+This is historical deployment evidence, not a statement of the current live
+version. The maintained release candidate and its target pins are described in
+[release-3.2.1-jitis.2.md](release-3.2.1-jitis.2.md); the preceding upstream sync
+is recorded in [release-3.2.1-jitis.1.md](release-3.2.1-jitis.1.md).
+Only the platform deployment establishes which version is live.
 
 The Wiki fork pipeline creates clean Frappe v16 benches and runs the privacy,
 permission, search-compatibility, and complete Wiki server suites. The exact
-production combination above is additionally installed and tested by the
+selected downstream combination is additionally installed and tested by the
 `jitis-platform-integration` clean-bench integration pipeline. The tests cover
 private attachment migration, public-file cloning, rollback/idempotency,
 role-controlled private files, anonymous access, and the SQLite search API.
@@ -33,9 +35,17 @@ portal-only boundary, adopt another space's root, or attach foreign revision
 history. Direct document editing with custom Desk permissions must authorize
 both the source and destination trees before changing either.
 
-The 2026-09-26 review candidate is checked against Frappe 16.35.0 and ERPNext
-16.36.0. It retains the released Wiki 3.2.1 base; a new reviewed JITIS tag and
-updated downstream pins are still required before deployment.
+Release candidate 3.2.1+jitis.2 is checked against Frappe 16.35.0 and ERPNext
+16.36.0. It retains the released Wiki 3.2.1 base. App review, an immutable tag and
+updated downstream pins are required before deployment.
+
+## Customer documentation
+
+Use the [customer documentation guide](customer-documentation/README.md) for
+the everyday workflow and reusable inventory, operating-instruction and network
+plan templates. The approved Wiki page is the customer view; editable source
+files stay in the internal SharePoint customer folder. These are documentation
+conventions, not an additional synchronization service or authorization layer.
 
 ## Downstream consumption
 
