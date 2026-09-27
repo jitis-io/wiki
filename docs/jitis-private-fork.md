@@ -87,12 +87,15 @@ For a normal stable sync:
    spaces; deny-by-default guest/publication rules; document-tree space
    ownership; fail-closed search, navigation and revisions; private attachment
    migration; asset permissions; and the narrow JPI/portal contract.
-5. Run repository quality checks, clean-bench Frappe/ERPNext compatibility,
+5. Set the app version and run repository quality checks, clean-bench Frappe/ERPNext compatibility,
    the complete Wiki server suite, Playwright where required, and negative
    guest plus cross-customer tests. A public-page success is not enough.
-6. Set the app version and create an annotated immutable JITIS tag. Use
-   `X.Y.Z+jitis.1` for a new upstream base and increment `jitis.N` for a local
-   follow-up.
+6. Merge the reviewed change into `jitis-v3` and wait for successful CI at that
+   exact default-branch commit, including the required browser checks. Create
+   an annotated immutable JITIS tag on that tested commit. Use `X.Y.Z+jitis.1`
+   for a new upstream base and increment `jitis.N` for a local follow-up. The
+   platform verifies this default-branch push CI; tags do not repeat the same
+   pipeline. PR and default-branch checks remain complete.
 7. Pin that exact tag and resolved commit in the ERP platform app lock. Run the
    complete JPI and platform gates and release only through the immutable
    platform workflow.

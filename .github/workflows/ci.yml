@@ -6,10 +6,6 @@ on:
   push:
     branches:
       - jitis-v3
-    tags:
-      # `+` is a glob quantifier in Actions filters; escape it so annotated
-      # SemVer build-metadata tags actually start this release gate.
-      - '3.*.*\+jitis.*'
 
 concurrency:
   group: wiki-ci-${{ github.ref }}

@@ -69,6 +69,15 @@ class CiContractTests(unittest.TestCase):
 		self.assertIn("--frappe-branch v16.35.0", workflow)
 		self.assertIn(EXPECTED_COMMITS["FRAPPE_COMMIT"], workflow)
 
+	def test_release_reuses_full_default_branch_ci_without_tag_reruns(self):
+		workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+		triggers = workflow.split("on:\n", 1)[1].split("concurrency:\n", 1)[0]
+		self.assertIn("  pull_request:\n", triggers)
+		self.assertIn("  push:\n    branches:\n      - jitis-v3\n", triggers)
+		self.assertNotIn("tags:", triggers)
+		self.assertIn("run --build --rm quality", workflow)
+		self.assertIn("run --build --rm integration", workflow)
+
 	def test_release_tags_and_resolved_commits_are_verified(self):
 		self.assertIn("--frappe-branch v16.35.0", self.integration)
 		self.assertIn('test "$(git -C apps/frappe rev-parse HEAD)" = "$FRAPPE_COMMIT"', self.integration)
