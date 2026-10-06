@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 import frappe
+from frappe import _
 from frappe.core.doctype.file.utils import get_content_hash
 from frappe.utils import cint
 
@@ -147,13 +148,13 @@ def prepare_wiki_attachment_clone(space, documents) -> tuple[WikiCloneSource, ..
 
 	names = [row.name for row in documents]
 	if not names or any(resolve_document_space(name) != space.name for name in names):
-		frappe.throw("Cannot clone an ambiguously owned Wiki tree", frappe.ValidationError)
+		frappe.throw(_("Cannot clone an ambiguously owned Wiki tree"), frappe.ValidationError)
 	parents = {space.root_group}
 	if names[0] != space.root_group:
-		frappe.throw("Cannot clone an invalid Wiki tree", frappe.ValidationError)
+		frappe.throw(_("Cannot clone an invalid Wiki tree"), frappe.ValidationError)
 	for row in documents[1:]:
 		if row.parent_wiki_document not in parents:
-			frappe.throw("Cannot clone an invalid Wiki tree", frappe.ValidationError)
+			frappe.throw(_("Cannot clone an invalid Wiki tree"), frappe.ValidationError)
 		parents.add(row.name)
 
 	fields = [
@@ -182,10 +183,10 @@ def prepare_wiki_attachment_clone(space, documents) -> tuple[WikiCloneSource, ..
 	for row in files:
 		url = str(row.file_url or "")
 		if not cint(row.is_private) or not url.startswith(PRIVATE_FILE_PREFIX):
-			frappe.throw("Wiki cloning requires isolated private attachments", frappe.ValidationError)
+			frappe.throw(_("Wiki cloning requires isolated private attachments"), frappe.ValidationError)
 		owners = frappe.get_all("File", filters={"file_url": url, "is_folder": 0}, pluck="name", limit=2)
 		if owners != [row.name]:
-			frappe.throw("Cannot clone an ambiguously owned Wiki attachment", frappe.ValidationError)
+			frappe.throw(_("Cannot clone an ambiguously owned Wiki attachment"), frappe.ValidationError)
 		sources.append(
 			WikiCloneSource(
 				name=row.name,
@@ -205,7 +206,7 @@ def prepare_wiki_attachment_clone(space, documents) -> tuple[WikiCloneSource, ..
 					masked = _replace_local_url(masked, url, "")
 				if LOCAL_PUBLIC_REFERENCE.search(masked) or LOCAL_PRIVATE_REFERENCE.search(masked):
 					frappe.throw(
-						"Cannot clone unverifiable or foreign Wiki file references", frappe.ValidationError
+						_("Cannot clone unverifiable or foreign Wiki file references"), frappe.ValidationError
 					)
 	return tuple(sources)
 
