@@ -14,7 +14,7 @@ fork; it must not carry or apply a second copy of the privacy patch.
 
 This is historical deployment evidence, not a statement of the current live
 version. The maintained release candidate and its target pins are described in
-[release-3.2.1-jitis.3.md](release-3.2.1-jitis.3.md); the preceding upstream sync
+[release-3.2.1-jitis.4.md](release-3.2.1-jitis.4.md); the preceding upstream sync
 is recorded in [release-3.2.1-jitis.1.md](release-3.2.1-jitis.1.md).
 Only the platform deployment establishes which version is live.
 
@@ -35,7 +35,7 @@ portal-only boundary, adopt another space's root, or attach foreign revision
 history. Direct document editing with custom Desk permissions must authorize
 both the source and destination trees before changing either.
 
-Release candidate 3.2.1+jitis.3 targets Frappe 16.35.0 and ERPNext
+Release candidate 3.2.1+jitis.4 targets Frappe 16.35.0 and ERPNext
 16.36.0. It retains the released Wiki 3.2.1 base. App review, an immutable tag and
 updated downstream pins are required before deployment.
 

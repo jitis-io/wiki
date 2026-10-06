@@ -1,6 +1,6 @@
 {
   "name": "wiki",
-  "version": "3.2.1+jitis.3",
+  "version": "3.2.1+jitis.4",
   "private": true,
   "packageManager": "yarn@1.22.22",
   "dependencies": {
