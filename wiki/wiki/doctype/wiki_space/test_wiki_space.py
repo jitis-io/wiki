@@ -1,10 +1,15 @@
 # Copyright (c) 2026, Frappe and Contributors
 # See license.txt
 
+from pathlib import Path
+from unittest.mock import patch
+
 import frappe
+from frappe.core.doctype.file.file import has_permission as has_file_permission
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils.nestedset import get_descendants_of
 
+from wiki import privacy
 from wiki.tests.factory import WikiFixtureMixin
 from wiki.wiki.doctype.wiki_space.patches.v3 import (
 	migrate_orphan_pages_to_wiki_document,
@@ -97,6 +102,243 @@ class TestWikiSpaceClone(WikiFixtureMixin, FrappeTestCase):
 		self.assertEqual(new_page["route"], expected_route)
 		self.assertEqual(new_page["content"], self.page_doc.content)
 		self.assertEqual(new_page["parent_wiki_document"], new_group["name"])
+
+	def _attachment(self, owner, content: bytes, file_name: str, fieldname=None):
+		return self.wiki.track(
+			"File",
+			frappe.get_doc(
+				{
+					"doctype": "File",
+					"file_name": file_name,
+					"content": content,
+					"is_private": 1,
+					"attached_to_doctype": owner.doctype,
+					"attached_to_name": owner.name,
+					"attached_to_field": fieldname,
+				}
+			).insert(ignore_permissions=True),
+		)
+
+	def _clone(self):
+		name = clone_wiki_space(self.space.name, f"clone-assets-{frappe.generate_hash(length=8)}")
+		self.wiki.track_space(name)
+		space = frappe.get_doc("Wiki Space", name)
+		page = frappe.get_doc(
+			"Wiki Document",
+			frappe.db.get_value(
+				"Wiki Document",
+				{
+					"wiki_space": space.name,
+					"title": self.page_doc.title,
+				},
+			),
+		)
+		return space, page
+
+	def test_clone_private_files_rewrites_content_meta_image_and_space_logos(self):
+		image = self._attachment(self.page_doc, b"<svg xmlns='http://www.w3.org/2000/svg'/>", "diagram.svg")
+		pdf = self._attachment(self.page_doc, b"%PDF-1.4\nPrivate attachment", "manual.pdf")
+		logo = self._attachment(self.space, b"<svg><title>Space logo</title></svg>", "logo.svg")
+		self.page_doc.content = (
+			f'<img src="{image.file_url}">[Manual]({pdf.file_url}?download=1)\n{image.file_url}'
+		)
+		self.page_doc.meta_image = image.file_url
+		self.page_doc.save()
+		for fieldname in ("light_mode_logo", "dark_mode_logo", "app_switcher_logo", "favicon"):
+			self.space.set(fieldname, logo.file_url)
+		self.space.save()
+
+		space, page = self._clone()
+		for source, owner in ((image, page), (pdf, page), (logo, space)):
+			copies = frappe.get_all(
+				"File",
+				filters={
+					"attached_to_doctype": owner.doctype,
+					"attached_to_name": owner.name,
+					"content_hash": source.content_hash,
+				},
+				fields=["name", "file_url", "is_private"],
+			)
+			self.assertEqual(len(copies), 1)
+			copy = frappe.get_doc("File", copies[0].name)
+			self.assertEqual(copy.is_private, 1)
+			self.assertNotEqual(copy.file_url, source.file_url)
+			self.assertEqual(
+				Path(copy.get_full_path()).read_bytes(), Path(source.get_full_path()).read_bytes()
+			)
+			self.assertEqual(frappe.db.count("File", {"file_url": copy.file_url}), 1)
+			if owner.doctype == "Wiki Document":
+				self.assertIn(copy.file_url, page.content)
+				self.assertNotIn(source.file_url, page.content)
+			else:
+				self.assertEqual(space.light_mode_logo, copy.file_url)
+				self.assertEqual(space.dark_mode_logo, copy.file_url)
+				self.assertEqual(space.app_switcher_logo, copy.file_url)
+				self.assertEqual(space.favicon, copy.file_url)
+		self.assertNotEqual(page.meta_image, image.file_url)
+		self.assertIn(page.meta_image, page.content)
+		self.assertIn("?download=1", page.content)
+		self.page_doc.reload()
+		self.assertIn(image.file_url, self.page_doc.content)
+
+	def test_clone_keeps_external_urls_and_copies_unreferenced_owned_files(self):
+		source = self._attachment(self.page_doc, b"Owned attachment", "owned.txt")
+		self.page_doc.content = f"External: https://docs.example.invalid{source.file_url}"
+		self.page_doc.save()
+		space, page = self._clone()
+		self.assertEqual(page.content, self.page_doc.content)
+		copy = frappe.get_doc(
+			"File",
+			frappe.db.get_value(
+				"File",
+				{
+					"attached_to_doctype": "Wiki Document",
+					"attached_to_name": page.name,
+				},
+			),
+		)
+		self.assertNotEqual(copy.file_url, source.file_url)
+		self.assertEqual(Path(copy.get_full_path()).read_bytes(), b"Owned attachment")
+
+	def _assert_clone_rejected_before_creation(self):
+		route = f"rejected-clone-{frappe.generate_hash(length=8)}"
+		files = set(frappe.get_all("File", pluck="name"))
+		with self.assertRaises(frappe.ValidationError):
+			clone_wiki_space(self.space.name, route)
+		self.assertFalse(frappe.db.exists("Wiki Space", {"route": route}))
+		self.assertEqual(set(frappe.get_all("File", pluck="name")), files)
+
+	def test_clone_rejects_foreign_private_file_references(self):
+		foreign = self.wiki.space(pages=[{"title": "Foreign private page"}])
+		file = self._attachment(foreign, b"Foreign customer document", "foreign.txt")
+		self.page_doc.content = f"[Foreign document]({file.file_url})"
+		self.page_doc.save()
+		self._assert_clone_rejected_before_creation()
+		self.assertEqual(Path(file.get_full_path()).read_bytes(), b"Foreign customer document")
+
+	def test_clone_rejects_foreign_space_logo(self):
+		foreign = self.wiki.space()
+		file = self._attachment(foreign, b"Foreign logo", "foreign-logo.txt")
+		self.space.light_mode_logo = file.file_url
+		self.space.save()
+		self._assert_clone_rejected_before_creation()
+
+	def test_clone_rejects_unknown_private_file_references(self):
+		self.page_doc.content = "[Missing document](/private/files/no-owned-file.pdf)"
+		self.page_doc.save()
+		self._assert_clone_rejected_before_creation()
+
+	def test_clone_rejects_missing_source_file(self):
+		file = self._attachment(self.page_doc, b"Missing file", "missing.txt")
+		path = Path(file.get_full_path())
+		path.unlink()
+		try:
+			self._assert_clone_rejected_before_creation()
+		finally:
+			path.write_bytes(b"Missing file")
+
+	def test_clone_rejects_source_content_hash_mismatch(self):
+		file = self._attachment(self.page_doc, b"Original bytes", "changed.txt")
+		path = Path(file.get_full_path())
+		path.write_bytes(b"Different bytes")
+		try:
+			self._assert_clone_rejected_before_creation()
+		finally:
+			path.write_bytes(b"Original bytes")
+
+	def test_clone_rejects_stale_foreign_space_stamp(self):
+		foreign = self.wiki.space()
+		frappe.db.set_value("Wiki Document", self.page_doc.name, "wiki_space", foreign.name)
+		self._assert_clone_rejected_before_creation()
+
+	def test_failed_clone_rollback_removes_new_file_bytes_and_keeps_source(self):
+		one = self._attachment(self.page_doc, b"Source one", "source-one.txt")
+		two = self._attachment(self.space, b"Source two", "source-two.txt")
+		frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
+		root = Path(frappe.get_site_path("private", "files"))
+		before = set(root.iterdir())
+		copy = privacy._copy_to_private
+		calls = 0
+
+		def fail_later(source, target):
+			nonlocal calls
+			calls += 1
+			if calls == 2:
+				raise OSError("Synthetic later file-copy failure")
+			copy(source, target)
+
+		route = f"rollback-clone-{frappe.generate_hash(length=8)}"
+		with patch("wiki.privacy._copy_to_private", side_effect=fail_later):
+			with self.assertRaises(OSError):
+				clone_wiki_space(self.space.name, route)
+		frappe.db.rollback()
+		self.assertFalse(frappe.db.exists("Wiki Space", {"route": route}))
+		self.assertEqual(set(root.iterdir()), before)
+		self.assertEqual(Path(one.get_full_path()).read_bytes(), b"Source one")
+		self.assertEqual(Path(two.get_full_path()).read_bytes(), b"Source two")
+
+		route = f"partial-write-clone-{frappe.generate_hash(length=8)}"
+		with patch("wiki.privacy.os.fsync", side_effect=OSError("Synthetic file flush failure")):
+			with self.assertRaises(OSError):
+				clone_wiki_space(self.space.name, route)
+		frappe.db.rollback()
+		self.assertFalse(frappe.db.exists("Wiki Space", {"route": route}))
+		self.assertEqual(set(root.iterdir()), before)
+		self.assertEqual(Path(one.get_full_path()).read_bytes(), b"Source one")
+		self.assertEqual(Path(two.get_full_path()).read_bytes(), b"Source two")
+
+	def test_clone_rejects_ambiguous_private_file_owner(self):
+		source = self._attachment(self.page_doc, b"Ambiguous source", "ambiguous.txt")
+		foreign = self.wiki.space()
+		alias = self._attachment(foreign, b"Other bytes", "alias.txt")
+		frappe.db.set_value("File", alias.name, "file_url", source.file_url, update_modified=False)
+		self._assert_clone_rejected_before_creation()
+
+	def test_clone_private_files_keep_both_space_permission_boundaries(self):
+		users = []
+		roles = []
+		for index in range(2):
+			token = frappe.generate_hash(length=8)
+			role = self.wiki.track(
+				"Role", frappe.get_doc({"doctype": "Role", "role_name": f"Clone Reader {token}"}).insert()
+			)
+			user = self.wiki.track(
+				"User",
+				frappe.get_doc(
+					{
+						"doctype": "User",
+						"email": f"clone-reader-{token}@example.invalid",
+						"first_name": f"Clone Reader {index}",
+						"send_welcome_email": 0,
+					}
+				).insert(),
+			)
+			user.add_roles(role.name)
+			users.append(user.name)
+			roles.append(role.name)
+		self.space.append("roles", {"role": roles[0], "permission_level": "Read"})
+		self.space.save()
+		source = self._attachment(self.page_doc, b"Space-scoped bytes", "scope.txt")
+		self.page_doc.content = source.file_url
+		self.page_doc.save()
+		space, page = self._clone()
+		space.set("roles", [{"role": roles[1], "permission_level": "Read"}])
+		space.save()
+		copy = frappe.get_doc(
+			"File",
+			frappe.db.get_value(
+				"File",
+				{
+					"attached_to_doctype": "Wiki Document",
+					"attached_to_name": page.name,
+				},
+			),
+		)
+		self.assertTrue(has_file_permission(source, "read", user=users[0]))
+		self.assertFalse(has_file_permission(source, "read", user=users[1]))
+		self.assertTrue(has_file_permission(copy, "read", user=users[1]))
+		self.assertFalse(has_file_permission(copy, "read", user=users[0]))
+		self.assertFalse(has_file_permission(copy, "read", user="Guest"))
 
 	def tearDown(self):
 		frappe.db.rollback()
