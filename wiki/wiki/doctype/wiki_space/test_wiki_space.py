@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Frappe and Contributors
 # See license.txt
 
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,6 +9,7 @@ import frappe
 from frappe.core.doctype.file.file import has_permission as has_file_permission
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils.nestedset import get_descendants_of
+from pypdf import PdfWriter
 
 from wiki import privacy
 from wiki.tests.factory import WikiFixtureMixin
@@ -137,7 +139,11 @@ class TestWikiSpaceClone(WikiFixtureMixin, FrappeTestCase):
 
 	def test_clone_private_files_rewrites_content_meta_image_and_space_logos(self):
 		image = self._attachment(self.page_doc, b"<svg xmlns='http://www.w3.org/2000/svg'/>", "diagram.svg")
-		pdf = self._attachment(self.page_doc, b"%PDF-1.4\nPrivate attachment", "manual.pdf")
+		stream = BytesIO()
+		writer = PdfWriter()
+		writer.add_blank_page(width=72, height=72)
+		writer.write(stream)
+		pdf = self._attachment(self.page_doc, stream.getvalue(), "manual.pdf")
 		logo = self._attachment(self.space, b"<svg><title>Space logo</title></svg>", "logo.svg")
 		self.page_doc.content = (
 			f'<img src="{image.file_url}">[Manual]({pdf.file_url}?download=1)\n{image.file_url}'
