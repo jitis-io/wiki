@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 import frappe
+from frappe import _
 from frappe.core.doctype.file.utils import get_content_hash
 from frappe.utils import cint
 
@@ -27,6 +28,7 @@ WIKI_REFERENCE_FIELDS = {
 PUBLIC_FILE_PREFIX = "/files/"
 PRIVATE_FILE_PREFIX = "/private/files/"
 LOCAL_PUBLIC_REFERENCE = re.compile(r"(?<![\w:/])/files/")
+LOCAL_PRIVATE_REFERENCE = re.compile(r"(?<![\w:/])/private/files/")
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,15 @@ class FileClone:
 	old_url: str
 	new_url: str
 	target: Path
+	source: VerifiedSource
+
+
+@dataclass(frozen=True)
+class WikiCloneSource:
+	name: str
+	attached_to_doctype: str
+	attached_to_name: str
+	attached_to_field: str | None
 	source: VerifiedSource
 
 
@@ -129,6 +140,117 @@ def validate_private_wiki_references(doc, method=None):
 				f"{doc.doctype}.{fieldname} must not reference a public local file",
 				frappe.ValidationError,
 			)
+
+
+def prepare_wiki_attachment_clone(space, documents) -> tuple[WikiCloneSource, ...]:
+	"""Verify the complete source tree and its private files before creating a clone."""
+	from wiki.permissions import resolve_document_space
+
+	names = [row.name for row in documents]
+	if not names or any(resolve_document_space(name) != space.name for name in names):
+		frappe.throw(_("Cannot clone an ambiguously owned Wiki tree"), frappe.ValidationError)
+	parents = {space.root_group}
+	if names[0] != space.root_group:
+		frappe.throw(_("Cannot clone an invalid Wiki tree"), frappe.ValidationError)
+	for row in documents[1:]:
+		if row.parent_wiki_document not in parents:
+			frappe.throw(_("Cannot clone an invalid Wiki tree"), frappe.ValidationError)
+		parents.add(row.name)
+
+	fields = [
+		"name",
+		"file_name",
+		"file_url",
+		"file_size",
+		"content_hash",
+		"is_private",
+		"attached_to_doctype",
+		"attached_to_name",
+		"attached_to_field",
+	]
+	files = frappe.get_all(
+		"File",
+		filters={"is_folder": 0, "attached_to_doctype": "Wiki Document", "attached_to_name": ["in", names]},
+		fields=fields,
+		limit_page_length=0,
+	) + frappe.get_all(
+		"File",
+		filters={"is_folder": 0, "attached_to_doctype": "Wiki Space", "attached_to_name": space.name},
+		fields=fields,
+		limit_page_length=0,
+	)
+	sources = []
+	for row in files:
+		url = str(row.file_url or "")
+		if not cint(row.is_private) or not url.startswith(PRIVATE_FILE_PREFIX):
+			frappe.throw(_("Wiki cloning requires isolated private attachments"), frappe.ValidationError)
+		owners = frappe.get_all("File", filters={"file_url": url, "is_folder": 0}, pluck="name", limit=2)
+		if owners != [row.name]:
+			frappe.throw(_("Cannot clone an ambiguously owned Wiki attachment"), frappe.ValidationError)
+		sources.append(
+			WikiCloneSource(
+				name=row.name,
+				attached_to_doctype=row.attached_to_doctype,
+				attached_to_name=row.attached_to_name,
+				attached_to_field=row.attached_to_field,
+				source=_verify_source(url, [row]),
+			)
+		)
+
+	urls = sorted((source.source.file_url for source in sources), key=len, reverse=True)
+	for doctype, rows in (("Wiki Space", [space]), ("Wiki Document", documents)):
+		for row in rows:
+			for fieldname in WIKI_REFERENCE_FIELDS[doctype]:
+				masked = str(row.get(fieldname) or "")
+				for url in urls:
+					masked = _replace_local_url(masked, url, "")
+				if LOCAL_PUBLIC_REFERENCE.search(masked) or LOCAL_PRIVATE_REFERENCE.search(masked):
+					frappe.throw(
+						_("Cannot clone unverifiable or foreign Wiki file references"), frappe.ValidationError
+					)
+	return tuple(sources)
+
+
+def clone_wiki_attachments(sources, document_names, new_space_name) -> dict[str, str]:
+	"""Copy verified bytes to new private paths and preserve the cloned owner."""
+	urls = {}
+	reserved = set()
+	for source in sources:
+		new_name = (
+			document_names[source.attached_to_name]
+			if source.attached_to_doctype == "Wiki Document"
+			else new_space_name
+		)
+		target = _reserve_private_target(
+			source.source.file_name,
+			f"clone:{source.attached_to_doctype}:{new_name}:{source.name}",
+			reserved,
+		)
+		_copy_to_private(source.source, target)
+		new_url = _private_url(target)
+		file_doc = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": source.source.file_name,
+				"file_url": new_url,
+				"is_private": 1,
+				"content_hash": source.source.content_hash,
+				"file_size": source.source.file_size,
+				"attached_to_doctype": source.attached_to_doctype,
+				"attached_to_name": new_name,
+				"attached_to_field": source.attached_to_field,
+			}
+		)
+		file_doc.flags.copy_from_existing_file = True
+		file_doc.insert(ignore_permissions=True)
+		urls[source.source.file_url] = new_url
+	return urls
+
+
+def rewrite_cloned_wiki_references(value, urls: dict[str, str]) -> str | None:
+	for old_url in sorted(urls, key=len, reverse=True):
+		value = _replace_local_url(str(value or ""), old_url, urls[old_url])
+	return value
 
 
 def ensure_wiki_attachments_private() -> dict[str, int]:
@@ -461,10 +583,10 @@ def _copy_to_private(source: VerifiedSource, target: Path) -> None:
 	if target.exists():
 		frappe.throw(f"Private migration target already exists: {target.name}", frappe.ValidationError)
 	with target.open("xb") as handle:
+		frappe.db.after_rollback.add(lambda path=target: path.unlink(missing_ok=True))
 		handle.write(content)
 		handle.flush()
 		os.fsync(handle.fileno())
-	frappe.db.after_rollback.add(lambda path=target: path.unlink(missing_ok=True))
 
 
 def _private_url(path: Path) -> str:

@@ -343,6 +343,14 @@ class WikiSpace(Document):
 def clone_wiki_space(wiki_space: str, new_space_route: str, user: str | None = None) -> str:
 	if user:
 		frappe.set_user(user)  # nosemgrep: frappe-setuser - restoring user context in background job
+	frappe.only_for("Wiki Manager")
+
+	from wiki.privacy import (
+		WIKI_REFERENCE_FIELDS,
+		clone_wiki_attachments,
+		prepare_wiki_attachment_clone,
+		rewrite_cloned_wiki_references,
+	)
 
 	space = frappe.get_doc("Wiki Space", wiki_space)
 	if not space.root_group:
@@ -352,12 +360,26 @@ def clone_wiki_space(wiki_space: str, new_space_route: str, user: str | None = N
 	if not new_route:
 		frappe.throw(_("Route cannot be empty"))
 
+	documents = _source_wiki_documents(space)
+	attachments = prepare_wiki_attachment_clone(space, documents)
 	new_space = _create_space_copy(space, new_route)
-	_clone_wiki_documents(space, new_space)
+	name_map = _clone_wiki_documents(space, new_space, documents)
+	urls = clone_wiki_attachments(attachments, name_map, new_space.name)
+	# Native saves build revisions only after newly owned File rows and URLs exist.
+	for source in documents:
+		new_doc = frappe.get_doc("Wiki Document", name_map[source.name])
+		for fieldname in WIKI_REFERENCE_FIELDS["Wiki Document"]:
+			new_doc.set(fieldname, rewrite_cloned_wiki_references(source.get(fieldname), urls))
+		new_doc.save(ignore_permissions=True)
+	for fieldname in WIKI_REFERENCE_FIELDS["Wiki Space"]:
+		new_space.set(fieldname, rewrite_cloned_wiki_references(space.get(fieldname), urls))
+	new_space.save(ignore_permissions=True)
 	return new_space.name
 
 
 def _create_space_copy(space: Document, new_route: str) -> Document:
+	from wiki.privacy import WIKI_REFERENCE_FIELDS
+
 	new_space = frappe.new_doc("Wiki Space")
 
 	for field in space.meta.fields:
@@ -366,6 +388,8 @@ def _create_space_copy(space: Document, new_route: str) -> Document:
 		if field.fieldtype == "Table":
 			continue
 		if field.fieldname in ("route", "root_group", "main_revision"):
+			continue
+		if field.fieldname in WIKI_REFERENCE_FIELDS["Wiki Space"]:
 			continue
 		new_space.set(field.fieldname, space.get(field.fieldname))
 
@@ -386,9 +410,9 @@ def _create_space_copy(space: Document, new_route: str) -> Document:
 	return new_space
 
 
-def _clone_wiki_documents(space: Document, new_space: Document) -> None:
+def _source_wiki_documents(space: Document) -> list:
 	root = frappe.get_doc("Wiki Document", space.root_group)
-	docs = frappe.get_all(
+	return frappe.get_all(
 		"Wiki Document",
 		fields=[
 			"name",
@@ -402,6 +426,7 @@ def _clone_wiki_documents(space: Document, new_space: Document) -> None:
 			"is_external_link",
 			"external_url",
 			"content",
+			"meta_image",
 			"parent_wiki_document",
 			"sort_order",
 			"lft",
@@ -410,6 +435,8 @@ def _clone_wiki_documents(space: Document, new_space: Document) -> None:
 		order_by="lft asc",
 	)
 
+
+def _clone_wiki_documents(space: Document, new_space: Document, docs: list) -> dict[str, str]:
 	old_root = space.root_group
 	new_root = new_space.root_group
 	name_map = {old_root: new_root}
@@ -429,7 +456,6 @@ def _clone_wiki_documents(space: Document, new_space: Document) -> None:
 		new_doc.is_published = doc.get("is_published")
 		new_doc.is_external_link = doc.get("is_external_link")
 		new_doc.external_url = doc.get("external_url")
-		new_doc.content = doc.get("content")
 		new_doc.parent_wiki_document = parent_name
 
 		new_doc.insert(ignore_permissions=True)
@@ -445,6 +471,7 @@ def _clone_wiki_documents(space: Document, new_space: Document) -> None:
 			)
 
 		name_map[doc["name"]] = new_doc.name
+	return name_map
 
 
 def _clone_route(route: str, old_base: str, new_base: str):
