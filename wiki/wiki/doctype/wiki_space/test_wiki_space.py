@@ -165,27 +165,52 @@ class TestWikiSpaceClone(WikiFixtureMixin, FrappeTestCase):
 				},
 				fields=["name", "file_url", "is_private"],
 			)
-			self.assertEqual(len(copies), 1)
-			copy = frappe.get_doc("File", copies[0].name)
-			self.assertEqual(copy.is_private, 1)
-			self.assertNotEqual(copy.file_url, source.file_url)
-			self.assertEqual(
-				Path(copy.get_full_path()).read_bytes(), Path(source.get_full_path()).read_bytes()
-			)
-			self.assertEqual(frappe.db.count("File", {"file_url": copy.file_url}), 1)
+			# Native AttachImage links may create separate same-hash rows; URL ownership
+			# and actual references, rather than one row per hash, are the invariant.
+			self.assertTrue(copies)
+			for row in copies:
+				copy = frappe.get_doc("File", row.name)
+				self.assertEqual(copy.is_private, 1)
+				self.assertNotEqual(copy.file_url, source.file_url)
+				self.assertEqual(
+					Path(copy.get_full_path()).read_bytes(), Path(source.get_full_path()).read_bytes()
+				)
+				self.assertEqual(frappe.db.count("File", {"file_url": copy.file_url}), 1)
 			if owner.doctype == "Wiki Document":
-				self.assertIn(copy.file_url, page.content)
+				self.assertTrue(any(copy.file_url in page.content for copy in copies))
 				self.assertNotIn(source.file_url, page.content)
 			else:
-				self.assertEqual(space.light_mode_logo, copy.file_url)
-				self.assertEqual(space.dark_mode_logo, copy.file_url)
-				self.assertEqual(space.app_switcher_logo, copy.file_url)
-				self.assertEqual(space.favicon, copy.file_url)
+				self.assertIn(space.light_mode_logo, [copy.file_url for copy in copies])
+				for fieldname in ("dark_mode_logo", "app_switcher_logo", "favicon"):
+					self.assertEqual(space.get(fieldname), space.light_mode_logo)
 		self.assertNotEqual(page.meta_image, image.file_url)
 		self.assertIn(page.meta_image, page.content)
 		self.assertIn("?download=1", page.content)
 		self.page_doc.reload()
 		self.assertIn(image.file_url, self.page_doc.content)
+
+		# The native attachment linker must not leave ambiguous shared URLs that
+		# break the portal resolver or prevent cloning the first clone again.
+		second_name = clone_wiki_space(space.name, f"second-clone-{frappe.generate_hash(length=8)}")
+		self.wiki.track_space(second_name)
+		second = frappe.get_doc("Wiki Space", second_name)
+		second_page = frappe.get_doc(
+			"Wiki Document",
+			frappe.db.get_value("Wiki Document", {"wiki_space": second.name, "title": page.title}),
+		)
+		self.assertNotEqual(second.light_mode_logo, space.light_mode_logo)
+		self.assertNotEqual(second_page.meta_image, page.meta_image)
+		second_files = frappe.get_all(
+			"File",
+			filters={"attached_to_doctype": "Wiki Document", "attached_to_name": second_page.name},
+			fields=["name", "file_url", "is_private"],
+		)
+		self.assertTrue(second_files)
+		for row in second_files:
+			self.assertEqual(row.is_private, 1)
+			self.assertEqual(frappe.db.count("File", {"file_url": row.file_url}), 1)
+			self.assertNotIn(row.file_url, page.content)
+			self.assertTrue(Path(frappe.get_doc("File", row.name).get_full_path()).is_file())
 
 	def test_clone_keeps_external_urls_and_copies_unreferenced_owned_files(self):
 		source = self._attachment(self.page_doc, b"Owned attachment", "owned.txt")
