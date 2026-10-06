@@ -15,6 +15,13 @@ Customer mappings and grants are not cloned. The companion JPI validation hook
 protects an enabled customer mapping from accidental removal of `Portal Only`;
 this tenant policy belongs in JPI rather than the Wiki fork.
 
+The existing transitive DOMPurify selector is locked to the upstream security
+release 3.4.16 for [GHSA-p98j-92pf-mc4p](https://github.com/cure53/DOMPurify/security/advisories/GHSA-p98j-92pf-mc4p).
+The affected in-place sanitization and node-removing after-hook combination
+was not found in Wiki's own frontend. This targeted dependency fix is carried
+until the next stable upstream sync incorporates or retains it; package ranges
+and other dependencies are unchanged.
+
 Compatibility targets remain Frappe 16.35.0 and ERPNext 16.36.0, retaining
 upstream Wiki v3.2.1 and the [preceding privacy and presentation changes](release-3.2.1-jitis.3.md).
 Release requires both disposable repository gates and default-branch CI,
