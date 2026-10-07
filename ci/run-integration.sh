@@ -62,6 +62,7 @@ cp -a "$APP_DIR" "$WIKI_SOURCE_DIR"
 bench get-app --skip-assets --soft-link wiki "$WIKI_SOURCE_DIR"
 test "$(readlink -f apps/wiki)" = "$(readlink -f "$WIKI_SOURCE_DIR")"
 bench setup requirements --dev
+node "$APP_DIR/ci/smoke-node-security.cjs" "$WIKI_SOURCE_DIR/frontend"
 
 bench new-site \
 	--db-host "$DB_HOST" \
