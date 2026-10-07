@@ -36,7 +36,7 @@ jobs:
         ports:
           - 11000:6379
       mariadb:
-        image: mariadb:10.6
+        image: mariadb:11.8
         env:
           MYSQL_ROOT_PASSWORD: root
         ports:
@@ -98,8 +98,8 @@ jobs:
       - name: Setup Bench
         run: |
           pip install frappe-bench
-          bench init --frappe-branch v16.35.0 --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
-          test "$(git -C ~/frappe-bench/apps/frappe rev-parse HEAD)" = "012667b9c4e7f66d5e1ff5858d2e922331d4300a"
+          bench init --frappe-branch v16.51.0 --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
+          test "$(git -C ~/frappe-bench/apps/frappe rev-parse HEAD)" = "6b450a166e076dd842e4db7ea0843f62881e62ac"
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
 

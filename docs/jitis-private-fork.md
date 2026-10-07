@@ -35,8 +35,8 @@ portal-only boundary, adopt another space's root, or attach foreign revision
 history. Direct document editing with custom Desk permissions must authorize
 both the source and destination trees before changing either.
 
-Release candidate 3.2.1+jitis.4 targets Frappe 16.35.0 and ERPNext
-16.36.0. It retains the released Wiki 3.2.1 base. App review, an immutable tag and
+Release candidate 3.3.0+jitis.1 targets Frappe16.51.0 and ERPNext
+16.50.0. It merges the released upstream Wiki3.3.0 base. App review, an immutable tag and
 updated downstream pins are required before deployment.
 
 ## Customer documentation

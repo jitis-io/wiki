@@ -6,11 +6,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 EXPECTED_COMMITS = {
-	"FRAPPE_COMMIT": "012667b9c4e7f66d5e1ff5858d2e922331d4300a",
-	"ERPNEXT_COMMIT": "b30aa5334bcea94dba74f5b866af13c43a861948",
+	"FRAPPE_COMMIT": "6b450a166e076dd842e4db7ea0843f62881e62ac",
+	"ERPNEXT_COMMIT": "7474d9e786277383de1242ab882f16856d17a9c9",
 }
 
-EXPECTED_WIKI_VERSION = "3.2.1+jitis.4"
+EXPECTED_WIKI_VERSION = "3.3.0+jitis.1"
 
 EXPECTED_ACTION_PINS = {
 	"actions/cache": ("0057852bfaa89a56745cba8c7296529d2fc39830", "v4.3.0"),
@@ -66,8 +66,9 @@ class CiContractTests(unittest.TestCase):
 		workflow = (ROOT / ".github" / "workflows" / "ui-tests.yml").read_text(encoding="utf-8")
 		push_block = workflow.split("push:", 1)[1].split("pull_request:", 1)[0]
 		self.assertIn("- jitis-v3", push_block)
-		self.assertIn("--frappe-branch v16.35.0", workflow)
+		self.assertIn("--frappe-branch v16.51.0", workflow)
 		self.assertIn(EXPECTED_COMMITS["FRAPPE_COMMIT"], workflow)
+		self.assertIn("image: mariadb:11.8", workflow)
 
 	def test_release_reuses_full_default_branch_ci_without_tag_reruns(self):
 		workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
@@ -79,13 +80,14 @@ class CiContractTests(unittest.TestCase):
 		self.assertIn("run --build --rm integration", workflow)
 
 	def test_release_tags_and_resolved_commits_are_verified(self):
-		self.assertIn("--frappe-branch v16.35.0", self.integration)
+		self.assertIn("--frappe-branch v16.51.0", self.integration)
 		self.assertIn('test "$(git -C apps/frappe rev-parse HEAD)" = "$FRAPPE_COMMIT"', self.integration)
-		self.assertIn("bench get-app --branch v16.36.0 --skip-assets erpnext", self.integration)
+		self.assertIn("bench get-app --branch v16.50.0 --skip-assets erpnext", self.integration)
 		self.assertIn('test "$(git -C apps/erpnext rev-parse HEAD)" = "$ERPNEXT_COMMIT"', self.integration)
 
 	def test_exact_private_tree_is_installed_and_fully_tested(self):
 		commands = [
+			'ln -s "$BENCH_DIR/apps/frappe" "$BENCH_DIR/local-apps/frappe"',
 			'bench get-app --skip-assets --soft-link wiki "$WIKI_SOURCE_DIR"',
 			'test "$(readlink -f apps/wiki)" = "$(readlink -f "$WIKI_SOURCE_DIR")"',
 			"--install-app erpnext",
