@@ -9,8 +9,8 @@ readonly DB_ROOT_PASSWORD="${DB_ROOT_PASSWORD:-root}"
 readonly SITE_NAME="${SITE_NAME:-test_site}"
 readonly WIKI_ONLY_SITE_NAME="${WIKI_ONLY_SITE_NAME:-wiki_test_site}"
 
-readonly FRAPPE_COMMIT="012667b9c4e7f66d5e1ff5858d2e922331d4300a"
-readonly ERPNEXT_COMMIT="b30aa5334bcea94dba74f5b866af13c43a861948"
+readonly FRAPPE_COMMIT="6b450a166e076dd842e4db7ea0843f62881e62ac"
+readonly ERPNEXT_COMMIT="7474d9e786277383de1242ab882f16856d17a9c9"
 
 mysql_ready() {
 	mariadb-admin ping \
@@ -38,7 +38,7 @@ redis-server --daemonize yes --port 13000 --save "" --appendonly no
 redis-server --daemonize yes --port 11000 --save "" --appendonly no
 
 bench init \
-	--frappe-branch v16.35.0 \
+	--frappe-branch v16.51.0 \
 	--python "$(command -v python)" \
 	--skip-assets \
 	--skip-redis-config-generation \
@@ -47,7 +47,7 @@ bench init \
 cd "$BENCH_DIR"
 test "$(git -C apps/frappe rev-parse HEAD)" = "$FRAPPE_COMMIT"
 
-bench get-app --branch v16.36.0 --skip-assets erpnext https://github.com/frappe/erpnext.git
+bench get-app --branch v16.50.0 --skip-assets erpnext https://github.com/frappe/erpnext.git
 test "$(git -C apps/erpnext rev-parse HEAD)" = "$ERPNEXT_COMMIT"
 
 ensure_source_ref
@@ -55,6 +55,9 @@ ensure_source_ref
 # Bench's expected depth: the upstream frontend imports ../../../../sites.
 readonly WIKI_SOURCE_DIR="$BENCH_DIR/local-apps/wiki"
 mkdir -p "$(dirname "$WIKI_SOURCE_DIR")"
+# Keep the upstream link:../../frappe/ui dependency valid when the exact Wiki
+# working tree is soft-linked from local-apps rather than cloned into apps.
+ln -s "$BENCH_DIR/apps/frappe" "$BENCH_DIR/local-apps/frappe"
 cp -a "$APP_DIR" "$WIKI_SOURCE_DIR"
 bench get-app --skip-assets --soft-link wiki "$WIKI_SOURCE_DIR"
 test "$(readlink -f apps/wiki)" = "$(readlink -f "$WIKI_SOURCE_DIR")"

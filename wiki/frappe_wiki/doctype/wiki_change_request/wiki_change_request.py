@@ -27,6 +27,7 @@ from wiki.frappe_wiki.doctype.wiki_revision.wiki_revision import (
 	recompute_revision_hashes,
 )
 from wiki.permissions import assert_can_read_space
+from wiki.telemetry import capture
 
 
 class WikiChangeRequest(Document):
@@ -850,6 +851,7 @@ def create_change_request(wiki_space: str, title: str, description: str | None =
 	cr.insert()
 
 	frappe.db.set_value("Wiki Revision", head_revision.name, "change_request", cr.name)
+	capture("change_request_created")
 	return cr
 
 
@@ -2188,6 +2190,12 @@ def _finalize_merge(cr: Document, merge_revision: Document) -> None:
 
 	# Merge applies rewrite structure/sort_order with raw db writes that skip on_update.
 	clear_wiki_tree_cache()
+	capture(
+		"change_request_merged",
+		items=frappe.db.count("Wiki Revision Item", {"revision": cr.head_revision}),
+		reviewed=bool(cr.reviewed_by and cr.reviewed_by != cr.owner),
+		conflicts=bool(frappe.db.exists("Wiki Merge Conflict", {"change_request": cr.name})),
+	)
 	_notify_cr_owner(cr, _("Your change request “{0}” was merged.").format(cr.title))
 
 
