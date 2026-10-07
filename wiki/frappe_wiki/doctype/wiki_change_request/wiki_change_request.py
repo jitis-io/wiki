@@ -532,8 +532,38 @@ def has_revision_changes(base_revision: str | None, head_revision: str | None) -
 	)
 
 
+def _draft_transaction_is_empty() -> bool:
+	return frappe.db.transaction_writes == 0 and not any(
+		len(getattr(frappe.db, name))
+		for name in ("before_commit", "after_commit", "before_rollback", "after_rollback")
+	)
+
+
+def _run_draft_transaction(operation, *args):
+	"""Retry only an endpoint-owned transaction, never discard a caller's work.
+
+	MariaDB snapshot isolation can reject the current row lock after an older
+	permission read. Refresh that whole attempt, including every original ACL.
+	Frappe rollback clears failed commit callbacks and runs rollback cleanup.
+	"""
+	retry_allowed = _draft_transaction_is_empty()
+	for attempt in range(3):
+		try:
+			return operation(*args)
+		except frappe.QueryDeadlockError:
+			if not retry_allowed or attempt == 2:
+				raise
+			frappe.db.rollback()
+			if not _draft_transaction_is_empty():
+				raise
+
+
 @frappe.whitelist()
 def get_or_create_draft_change_request(wiki_space: str, title: str | None = None) -> dict[str, Any]:
+	return _run_draft_transaction(_get_or_create_draft_change_request, wiki_space, title)
+
+
+def _get_or_create_draft_change_request(wiki_space: str, title: str | None) -> dict[str, Any]:
 	from wiki.permissions import assert_space_writable, can_read_space
 
 	if not can_read_space(wiki_space):
@@ -542,6 +572,10 @@ def get_or_create_draft_change_request(wiki_space: str, title: str | None = None
 	_assert_space_accepts_contributions(wiki_space)
 	assert_space_writable(wiki_space)
 
+	# Serialize concurrent browser/API initialization until the request commits.
+	# A current locking read also works when authentication already opened a
+	# repeatable-read snapshot before another request created the first draft.
+	frappe.get_doc("Wiki Space", wiki_space, for_update=True)
 	flush_pending_revision_syncs()
 
 	cr = _find_existing_draft(wiki_space)
@@ -553,12 +587,12 @@ def get_or_create_draft_change_request(wiki_space: str, title: str | None = None
 
 	space = frappe.get_doc("Wiki Space", wiki_space)
 	default_title = title or f"Draft Changes - {space.space_name}"
-	return create_change_request(wiki_space, default_title).as_dict()
+	return _create_change_request(wiki_space, default_title).as_dict()
 
 
 def _find_existing_draft(wiki_space: str) -> Document | None:
 	"""Find user's most relevant draft: prefer one with actual changes."""
-	existing = frappe.get_all(
+	existing = frappe.qb.get_query(
 		"Wiki Change Request",
 		filters={
 			"wiki_space": wiki_space,
@@ -567,7 +601,9 @@ def _find_existing_draft(wiki_space: str) -> Document | None:
 		},
 		fields=["name", "base_revision", "head_revision", "modified"],
 		order_by="modified desc",
-	)
+		for_update=True,
+		ignore_permissions=True,
+	).run(as_dict=True)
 	if not existing:
 		return None
 
@@ -579,14 +615,14 @@ def _find_existing_draft(wiki_space: str) -> Document | None:
 	if not selected:
 		selected = existing[0]
 
-	cr = frappe.get_doc("Wiki Change Request", selected["name"])
+	cr = frappe.get_doc("Wiki Change Request", selected["name"], for_update=True)
 	cr.check_permission("read")
 	return cr
 
 
 def _is_stale_empty_draft(cr: Document, wiki_space: str) -> bool:
 	"""True if the draft is outdated AND has no changes."""
-	main_revision = frappe.get_value("Wiki Space", wiki_space, "main_revision")
+	main_revision = frappe.db.get_value("Wiki Space", wiki_space, "main_revision", for_update=True)
 	if not main_revision or not cr.base_revision or cr.base_revision == main_revision:
 		return False
 	frappe.db.set_value("Wiki Change Request", cr.name, "outdated", 1)
@@ -820,6 +856,10 @@ def get_cr_page(name: str, doc_key: str) -> dict[str, Any]:
 
 @frappe.whitelist()
 def create_change_request(wiki_space: str, title: str, description: str | None = None) -> Document:
+	return _run_draft_transaction(_create_change_request, wiki_space, title, description)
+
+
+def _create_change_request(wiki_space: str, title: str, description: str | None = None) -> Document:
 	from wiki.permissions import assert_space_writable, can_read_space
 
 	if not can_read_space(wiki_space):
@@ -828,9 +868,10 @@ def create_change_request(wiki_space: str, title: str, description: str | None =
 	_assert_space_accepts_contributions(wiki_space)
 	assert_space_writable(wiki_space)
 
+	frappe.get_doc("Wiki Space", wiki_space, for_update=True)
 	flush_pending_revision_syncs()
 
-	space = frappe.get_doc("Wiki Space", wiki_space)
+	space = frappe.get_doc("Wiki Space", wiki_space, for_update=True)
 	if not space.main_revision:
 		# Seed the first revision with elevated privileges so a Read-tier
 		# contributor (allowed to raise CRs) can bootstrap a fresh space.
