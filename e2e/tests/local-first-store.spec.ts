@@ -753,86 +753,168 @@ test.describe('Local-first draft workspace', () => {
 			.toBe(false);
 	});
 
-	test('a restored draft matching normalized server markdown self-heals after editor mount', async ({
-		page,
-		request,
-		wiki,
-	}) => {
-		const timestamp = Date.now();
-		const pageTitle = `normalized-draft-page-${timestamp}`;
-		const rawServerContent = `Line A ${timestamp}\nLine B`;
+	for (const normalizedMatch of [false, true]) {
+		test(`a restored ${
+			normalizedMatch ? 'normalized matching' : 'unsaved'
+		} draft waits for hydration before editor mount`, async ({
+			page,
+			request,
+			wiki,
+		}) => {
+			const timestamp = Date.now();
+			const pageTitle = `hydrated-draft-page-${timestamp}`;
+			const serverContent = `Saved ${timestamp}\nLine B`;
+			const unsavedContent = `Unsaved work ${timestamp}\nLine C`;
 
-		await createSpaceViaUI(page, wiki);
-		await createPageViaUI(page, pageTitle);
-		await page.locator('aside').getByText(pageTitle, { exact: true }).click();
-		await page.waitForFunction(
-			() => {
+			await createSpaceViaUI(page, wiki);
+			await createPageViaUI(page, `${pageTitle}-other`);
+			await page.waitForFunction(() => {
 				const match = window.location.pathname.match(/\/draft\/([^/?#]+)/);
-				if (!match) return false;
-				return !decodeURIComponent(match[1]).startsWith('tmp_');
-			},
-			{ timeout: 10000 },
-		);
-		await page.waitForFunction(() => window.wikiEditor !== undefined, {
-			timeout: 10000,
-		});
-
-		const planted = await page.evaluate(async (rawContent) => {
-			const store = window.__draftStore;
-			const crName = store.crName;
-			const match = window.location.pathname.match(/\/draft\/([^/?#]+)/);
-			const docKey = match ? decodeURIComponent(match[1]) : null;
-			const manager = (
-				window.wikiEditor as typeof window.wikiEditor & {
-					markdown?: {
-						parse: (content: string) => unknown;
-						serialize: (doc: unknown) => string;
-					};
-				}
-			).markdown;
-			if (!crName || !docKey || !manager) return null;
-			const normalizedContent = manager.serialize(manager.parse(rawContent));
-			if (normalizedContent === rawContent) return null;
-			await new Promise<void>((resolve, reject) => {
-				const req = indexedDB.open('wiki-drafts');
-				req.onupgradeneeded = () => req.result.createObjectStore('drafts');
-				req.onsuccess = () => {
-					const put = req.result
-						.transaction('drafts', 'readwrite')
-						.objectStore('drafts')
-						.put(
-							{ content: normalizedContent, title: '', savedAt: 1 },
-							`cr:${crName}:${docKey}`,
-						);
-					put.onsuccess = () => resolve();
-					put.onerror = () => reject(put.error);
-				};
-				req.onerror = () => reject(req.error);
+				return match && !decodeURIComponent(match[1]).startsWith('tmp_');
 			});
-			return { crName, docKey, normalizedContent };
-		}, rawServerContent);
-		if (!planted) throw new Error('Expected markdown normalization to differ');
+			const blockedDocKey = await page.evaluate(() =>
+				decodeURIComponent(
+					window.location.pathname.match(/\/draft\/([^/?#]+)/)?.[1] || '',
+				),
+			);
+			await createPageViaUI(page, pageTitle);
+			await page.locator('aside').getByText(pageTitle, { exact: true }).click();
+			await page.waitForFunction(() => {
+				const match = window.location.pathname.match(/\/draft\/([^/?#]+)/);
+				return (
+					match &&
+					!decodeURIComponent(match[1]).startsWith('tmp_') &&
+					window.wikiEditor
+				);
+			});
+			const planted = await page.evaluate(
+				async ({
+					serverContent,
+					unsavedContent,
+					normalizedMatch,
+					blockedDocKey,
+				}) => {
+					const crName = window.__draftStore.crName;
+					const docKey = decodeURIComponent(
+						window.location.pathname.match(/\/draft\/([^/?#]+)/)?.[1] || '',
+					);
+					const manager = (
+						window.wikiEditor as typeof window.wikiEditor & {
+							markdown: {
+								parse: (content: string) => unknown;
+								serialize: (doc: unknown) => string;
+							};
+						}
+					).markdown;
+					const localContent = manager.serialize(
+						manager.parse(normalizedMatch ? serverContent : unsavedContent),
+					);
+					await new Promise<void>((resolve, reject) => {
+						const req = indexedDB.open('wiki-drafts');
+						req.onupgradeneeded = () => req.result.createObjectStore('drafts');
+						req.onsuccess = () => {
+							const tx = req.result.transaction('drafts', 'readwrite');
+							tx.objectStore('drafts').put(
+								{ content: localContent, title: '', savedAt: 1 },
+								`cr:${crName}:${docKey}`,
+							);
+							// This second, unchanged page lets the visible page restore
+							// first while the whole workspace is still hydrating.
+							tx.objectStore('drafts').put(
+								{ content: '', savedAt: 1 },
+								`cr:${crName}:${blockedDocKey}`,
+							);
+							tx.oncomplete = () => resolve();
+							tx.onerror = () => reject(tx.error);
+						};
+						req.onerror = () => reject(req.error);
+					});
+					return { crName, docKey, localContent };
+				},
+				{ serverContent, unsavedContent, normalizedMatch, blockedDocKey },
+			);
+			if (normalizedMatch) expect(planted.localContent).not.toBe(serverContent);
+			await callMethod(request, `${CR_METHOD_PREFIX}.update_cr_page`, {
+				name: planted.crName,
+				doc_key: planted.docKey,
+				fields: { content: serverContent },
+			});
+			// Hold the unchanged page's real server read. The visible page can
+			// restore first, while hydrate is still awaiting the second page.
+			let releaseRead: () => void = () => {};
+			let markHeld: () => void = () => {};
+			const readHeld = new Promise<void>((resolve) => {
+				markHeld = resolve;
+			});
+			const readReleased = new Promise<void>((resolve) => {
+				releaseRead = resolve;
+			});
+			await page.route(
+				`**/api/method/${CR_METHOD_PREFIX}.get_cr_page`,
+				async (route) => {
+					if (route.request().postData()?.includes(blockedDocKey)) {
+						markHeld();
+						await readReleased;
+					}
+					await route.continue();
+				},
+			);
+			await page.reload();
+			await readHeld;
+			await page.waitForFunction(
+				(docKey) => Boolean(window.__draftStore.pagesByKey[docKey]),
+				planted.docKey,
+			);
+			try {
+				await expect(page.locator('.tiptap')).toHaveCount(0);
+			} finally {
+				releaseRead();
+			}
 
-		await callMethod(request, `${CR_METHOD_PREFIX}.update_cr_page`, {
-			name: planted.crName,
-			doc_key: planted.docKey,
-			fields: { content: rawServerContent },
+			await expect(page.locator('.tiptap')).toContainText(
+				normalizedMatch ? `Saved ${timestamp}` : `Unsaved work ${timestamp}`,
+			);
+			if (normalizedMatch) {
+				await expect(page.getByText('Unsaved changes')).toBeHidden();
+				await expect(
+					page.getByRole('button', { name: 'Submit for Review' }),
+				).toBeEnabled();
+			} else {
+				await expect(page.getByText('Unsaved changes')).toBeVisible();
+				await expect(
+					page.getByRole('button', { name: 'Submit for Review' }),
+				).toBeEnabled();
+				const savedPage = await callMethod<{ content: string }>(
+					request,
+					`${CR_METHOD_PREFIX}.get_cr_page`,
+					{ name: planted.crName, doc_key: planted.docKey },
+				);
+				expect(savedPage.content).toBe(serverContent);
+				// Rehydration also unmounts an already-open editor. Its final
+				// flush must preserve a keystroke before the debounce has fired.
+				await page.evaluate(async (content) => {
+					window.wikiEditor.commands.setContent(content, {
+						contentType: 'markdown',
+					});
+					const store = window.__draftStore as typeof window.__draftStore & {
+						spaceId: string;
+						hydrate: (spaceId: string) => Promise<void>;
+					};
+					await store.hydrate(store.spaceId);
+				}, `${unsavedContent}\nFresh before rehydrate`);
+				await expect(page.locator('.tiptap')).toContainText(
+					'Fresh before rehydrate',
+				);
+				await expect(page.getByText('Unsaved changes')).toBeVisible();
+				const unchanged = await callMethod<{ content: string }>(
+					request,
+					`${CR_METHOD_PREFIX}.get_cr_page`,
+					{ name: planted.crName, doc_key: planted.docKey },
+				);
+				expect(unchanged.content).toBe(serverContent);
+			}
 		});
-
-		await page.reload();
-		await page.waitForLoadState('networkidle');
-		await page.waitForFunction(() => window.wikiEditor !== undefined, {
-			timeout: 10000,
-		});
-
-		// The persisted text and server text differ byte-for-byte, but Tiptap
-		// normalizes them to the same document. Mount reconciliation must clear
-		// the phantom draft instead of keeping Submit/Merge gated.
-		await expect(page.getByText('Unsaved changes')).toBeHidden();
-		await expect(
-			page.getByRole('button', { name: 'Submit for Review' }),
-		).toBeEnabled();
-	});
+	}
 
 	test('saving again while the first save is in flight persists the latest content', async ({
 		page,

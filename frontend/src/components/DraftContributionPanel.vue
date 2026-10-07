@@ -234,10 +234,21 @@ async function loadCrPage() {
 	}
 	loadFailed.value = false;
 
-	const cached = draftStore.pagesByKey[docKey];
-	if (cached) setCrPageFromStore(docKey, cached);
-
 	try {
+		// A restored page can arrive before the rest of the workspace. Do not
+		// mount its editor against an intermediate server/draft snapshot.
+		if (
+			props.spaceId &&
+			(draftStore.spaceId !== props.spaceId ||
+				draftStore.isHydrating ||
+				!draftStore.crName)
+		) {
+			await draftStore.hydrate(props.spaceId);
+		}
+		if (token !== loadToken) return;
+		const cached = draftStore.pagesByKey[docKey];
+		if (cached) setCrPageFromStore(docKey, cached);
+
 		const page = await draftStore.loadCrPage(docKey);
 		if (token !== loadToken) return; // superseded by a newer navigation
 		if (page) {
@@ -407,6 +418,7 @@ const savedContent = computed(
 );
 
 const editorKey = computed(() => {
+	if (draftStore.isHydrating || draftStore.spaceId !== props.spaceId) return null;
 	if (crPage.value?.doc_key === props.docKey) {
 		return `draft-${props.docKey}-${crPage.value?.doc_key}`;
 	}

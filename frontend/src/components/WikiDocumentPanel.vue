@@ -505,6 +505,9 @@ const editorKey = computed(() => {
 	if (props.readonly) {
 		return wikiDoc.value.doc?.name === props.pageId ? props.pageId : null;
 	}
+	// Restore every persisted buffer before the editor can reconcile its
+	// initial content. Read-only rendering above needs no draft hydration.
+	if (draftStore.isHydrating || draftStore.spaceId !== props.spaceId) return null;
 	// Gate on the loaded overlay matching the current doc — NOT on
 	// `isLoadingCrPage`. A background revalidation (after a save / title /
 	// route / publish edit) flips that flag without changing the page, and

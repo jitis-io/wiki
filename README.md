@@ -23,6 +23,10 @@ endpoint-owned transaction makes at most three attempts with fresh permission
 checks; pending caller writes or transaction callbacks prevent this rollback.
 No retry changes a revision, publication or permission decision.
 
+Writable editors wait for the current space's complete draft restoration before
+mounting. Real local edits survive that startup boundary; markdown that matches
+the confirmed server document is reconciled without phantom unsaved changes.
+
 ## Frappe Wiki
 
 For the maintained JITIS fork, see the [release and ownership guide](docs/jitis-private-fork.md),
