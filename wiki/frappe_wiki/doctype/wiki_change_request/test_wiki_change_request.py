@@ -109,6 +109,79 @@ class TestWikiChangeRequest(FrappeTestCase):
 		effective = get_effective_revision_item_map(cr.head_revision)
 		self.assertEqual(len(effective), 2)
 
+	def test_first_draft_uses_current_committed_revision_after_an_old_snapshot(self):
+		# Real independent MariaDB transactions: the second connection has read
+		# the empty space before the first request commits its draft and revision.
+		space = create_test_wiki_space()
+		frappe.db.commit()
+		try:
+			with self.secondary_connection():
+				self.assertFalse(frappe.db.get_value("Wiki Space", space.name, "main_revision"))
+				self.assertEqual(frappe.db.count("Wiki Change Request", {"wiki_space": space.name}), 0)
+			with self.primary_connection():
+				first = get_or_create_draft_change_request(space.name)
+				frappe.db.commit()
+			with self.secondary_connection():
+				second = get_or_create_draft_change_request(space.name)
+				self.assertEqual(second["name"], first["name"])
+				self.assertEqual(second["base_revision"], first["base_revision"])
+				self.assertEqual(second["head_revision"], first["head_revision"])
+				self.assertEqual(frappe.db.count("Wiki Change Request", {"wiki_space": space.name}), 1)
+		finally:
+			if self._secondary_connection:
+				self._secondary_connection.rollback()
+			with self.primary_connection():
+				frappe.delete_doc("Wiki Space", space.name, force=True, ignore_permissions=True)
+				frappe.db.commit()
+			frappe.local.db = self._primary_connection
+
+	def test_draft_deadlock_does_not_rollback_pending_caller_work(self):
+		space = create_test_wiki_space()
+		frappe.db.set_value("Wiki Space", space.name, "space_name", "Pending caller work")
+		callbacks = len(frappe.db.before_commit)
+		with patch(
+			"wiki.frappe_wiki.doctype.wiki_change_request.wiki_change_request._get_or_create_draft_change_request",
+			side_effect=frappe.QueryDeadlockError("Injected native deadlock"),
+		) as attempt:
+			with self.assertRaises(frappe.QueryDeadlockError):
+				get_or_create_draft_change_request(space.name)
+			self.assertEqual(attempt.call_count, 1)
+		self.assertEqual(frappe.db.get_value("Wiki Space", space.name, "space_name"), "Pending caller work")
+		self.assertGreater(frappe.db.transaction_writes, 0)
+		self.assertEqual(len(frappe.db.before_commit), callbacks)
+
+	def test_draft_deadlock_preserves_callback_only_caller_without_writes(self):
+		self.assertEqual(frappe.db.transaction_writes, 0)
+		completed = []
+		frappe.db.after_commit.add(lambda: completed.append("caller callback"))
+		with patch(
+			"wiki.frappe_wiki.doctype.wiki_change_request.wiki_change_request._get_or_create_draft_change_request",
+			side_effect=frappe.QueryDeadlockError("Injected native deadlock"),
+		) as attempt:
+			with self.assertRaises(frappe.QueryDeadlockError):
+				get_or_create_draft_change_request("callback-only-caller")
+			self.assertEqual(attempt.call_count, 1)
+		self.assertEqual(frappe.db.transaction_writes, 0)
+		self.assertEqual(len(frappe.db.after_commit), 1)
+		self.assertEqual(completed, [])
+		frappe.db.after_commit.run()
+		self.assertEqual(completed, ["caller callback"])
+
+	def test_denied_first_draft_creates_no_revision_or_change_request(self):
+		space = create_test_wiki_space()
+		try:
+			frappe.set_user("Guest")
+			for operation, args in (
+				(get_or_create_draft_change_request, (space.name,)),
+				(create_change_request, (space.name, "Denied draft")),
+			):
+				with self.assertRaises(frappe.PermissionError):
+					operation(*args)
+		finally:
+			frappe.set_user("Administrator")
+		self.assertEqual(frappe.db.count("Wiki Change Request", {"wiki_space": space.name}), 0)
+		self.assertEqual(frappe.db.count("Wiki Revision", {"wiki_space": space.name}), 0)
+
 	def test_create_update_page_in_cr(self):
 		space = create_test_wiki_space()
 		create_test_wiki_document(space.root_group, title="Page A")

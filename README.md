@@ -17,6 +17,12 @@
 <a href="https://docs.frappe.io/wiki-v2/">Documentation</a>
 </div>
 
+First-draft initialization serializes the space revision and reuses the current
+committed draft. On native MariaDB snapshot conflicts, an otherwise empty
+endpoint-owned transaction makes at most three attempts with fresh permission
+checks; pending caller writes or transaction callbacks prevent this rollback.
+No retry changes a revision, publication or permission decision.
+
 ## Frappe Wiki
 
 For the maintained JITIS fork, see the [release and ownership guide](docs/jitis-private-fork.md),
