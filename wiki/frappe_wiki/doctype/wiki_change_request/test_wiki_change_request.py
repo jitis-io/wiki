@@ -113,14 +113,16 @@ class TestWikiChangeRequest(FrappeTestCase):
 		# Real independent MariaDB transactions: the second connection has read
 		# the empty space before the first request commits its draft and revision.
 		space = create_test_wiki_space()
-		frappe.db.commit()
+		# The independent connection must see this synthetic fixture before its snapshot starts.
+		frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
 		try:
 			with self.secondary_connection():
 				self.assertFalse(frappe.db.get_value("Wiki Space", space.name, "main_revision"))
 				self.assertEqual(frappe.db.count("Wiki Change Request", {"wiki_space": space.name}), 0)
 			with self.primary_connection():
 				first = get_or_create_draft_change_request(space.name)
-				frappe.db.commit()
+				# Model the first HTTP request committing before the stale-snapshot request continues.
+				frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
 			with self.secondary_connection():
 				second = get_or_create_draft_change_request(space.name)
 				self.assertEqual(second["name"], first["name"])
@@ -132,7 +134,8 @@ class TestWikiChangeRequest(FrappeTestCase):
 				self._secondary_connection.rollback()
 			with self.primary_connection():
 				frappe.delete_doc("Wiki Space", space.name, force=True, ignore_permissions=True)
-				frappe.db.commit()
+				# The committed synthetic fixture must be removed durably even if an assertion fails.
+				frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
 			frappe.local.db = self._primary_connection
 
 	def test_draft_deadlock_does_not_rollback_pending_caller_work(self):
