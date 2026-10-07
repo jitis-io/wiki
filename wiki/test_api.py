@@ -1315,3 +1315,27 @@ class TestWikiWebpConversion(FrappeTestCase):
 			self.assertFalse(Path(get_files_path(doc.file_name)).exists())
 		for path in original_paths:
 			self.assertFalse(path.exists())
+
+	def test_concurrent_same_named_uploads_do_not_overwrite(self):
+		"""Images pasted together upload in parallel. Both requests saw the same `.webp` name as free,
+		and the second write replaced the first image. Simulate the other request winning the race."""
+		from unittest.mock import patch
+
+		from frappe.utils import get_files_path
+
+		from wiki.api import convert_file_to_webp
+
+		taken_name = f"race-{frappe.generate_hash(length=8)}.webp"
+		taken_path = get_files_path(taken_name)
+		with open(taken_path, "wb") as f:
+			f.write(b"the other request's image")
+		self.webp_paths = [taken_path]
+
+		with patch("frappe.core.doctype.file.utils.generate_file_name", return_value=taken_name):
+			url = convert_file_to_webp(self.upload_png((0, 255, 0)))
+		self.webp_paths.append(get_files_path(url.split("/files/")[-1]))
+
+		self.assertNotEqual(url, f"/files/{taken_name}")
+		self.assertTrue(url.endswith(".webp"))
+		with open(taken_path, "rb") as f:
+			self.assertEqual(f.read(), b"the other request's image")

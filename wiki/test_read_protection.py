@@ -3,9 +3,12 @@
 
 """Tenant-isolation regressions for reader-facing Wiki endpoints."""
 
+from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.parse import quote
 
 import frappe
+from frappe.handler import is_valid_http_method
 from frappe.tests import IntegrationTestCase
 from frappe.utils import now_datetime
 
@@ -18,8 +21,10 @@ from wiki.frappe_wiki.doctype.wiki_change_request.wiki_change_request import (
 )
 from wiki.frappe_wiki.doctype.wiki_document.search import _filter_hits_by_space_visibility
 from wiki.frappe_wiki.doctype.wiki_document.wiki_document import (
+	WikiDocument,
 	get_breadcrumbs,
 	get_page_data,
+	resolve_wiki_links,
 )
 from wiki.frappe_wiki.doctype.wiki_document.wiki_sqlite_search import WikiSQLiteSearch
 from wiki.wiki.doctype.wiki_page_revision.wiki_page_revision import get_revisions
@@ -232,6 +237,42 @@ class TestTenantReadProtection(IntegrationTestCase):
 		frappe.set_user("Administrator")
 		self.assertIn(portal_space.name, get_restricted_spaces(requested))
 
+	def test_analytics_and_delete_capabilities_preserve_customer_and_portal_boundaries(self):
+		from wiki.api import get_space_capabilities
+		from wiki.api.analytics import get_analytics, get_overview
+
+		portal_space = self._make_space("Portal analytics", [(TENANT_A_ROLE, "Write")])
+		portal_space.portal_only = 1
+		portal_space.save(ignore_permissions=True)
+		portal_page = self._make_page(portal_space, "Portal analytics secret")
+		for user, foreign in ((self.tenant_a_user, self.space_b), (self.tenant_b_user, self.space_a)):
+			frappe.set_user(user)
+			for space in (foreign, portal_space):
+				with self.subTest(user=user, space=space.name):
+					self.assertFalse(get_space_capabilities(space.name)["can_delete"])
+					with self.assertRaises(frappe.PermissionError):
+						get_analytics("2026-03-01", "2026-03-31", space=space.name)
+					with self.assertRaises(frappe.PermissionError):
+						frappe.delete_doc("Wiki Space", space.name)
+			with self.assertRaises(frappe.PermissionError):
+				get_overview("2026-03-01", "2026-03-31")
+			with self.assertRaises(frappe.DoesNotExistError):
+				get_analytics("2026-03-01", "2026-03-31", document=portal_page.name)
+
+	def test_document_analytics_rejects_mismatched_or_orphan_scope_before_cache_read(self):
+		from wiki.api.analytics import get_analytics
+
+		# An admin can repair these records in Desk, but a reader-facing API must
+		# not turn that exception into authority over an ambiguously owned page.
+		for user in ("Administrator", self.tenant_a_user, self.tenant_b_user):
+			frappe.set_user(user)
+			for document in (self.mismatched, self.orphan):
+				with self.subTest(user=user, document=document.name):
+					with patch("wiki.api.analytics.store.reader") as reader:
+						with self.assertRaises(frappe.DoesNotExistError):
+							get_analytics("2026-03-01", "2026-03-31", document=document.name)
+						reader.assert_not_called()
+
 	def test_new_editor_endpoints_are_not_guest_whitelisted(self):
 		frappe.set_user("Guest")
 		for endpoint in (search_pages, get_space_stats, get_restricted_spaces):
@@ -341,3 +382,77 @@ class TestTenantReadProtection(IntegrationTestCase):
 			self.assertEqual(len(revisions), 1)
 			self.assertIn("Legacy authorized content", revisions[0].content)
 			revision_query.assert_called_once_with(legacy_page.name)
+
+	def test_internal_links_revalidate_target_ownership_and_publication(self):
+		frappe.set_user("Administrator")
+		portal_space = self._make_space("Portal Only", [("Guest", "Read")])
+		portal_space.portal_only = 1
+		portal_space.save(ignore_permissions=True)
+		portal_page = self._make_page(portal_space, "Portal target")
+		# Simulate stale imported stamps without moving the authoritative tree.
+		for target in (self.orphan, self.mismatched):
+			frappe.db.set_value(
+				"Wiki Document", target.name, "wiki_space", self.public_space.name, update_modified=False
+			)
+			frappe.clear_document_cache("Wiki Document", target.name)
+		frappe.set_user("Guest")
+		valid = f'<a data-wiki-link="{self.public_page.doc_key}">Public</a>'
+		self.assertEqual(
+			resolve_wiki_links(valid, self.public_space.name),
+			f'<a href="/{quote(self.public_page.route)}">Public</a>',
+		)
+		for target in (self.orphan, self.mismatched, self.page_b, portal_page):
+			with self.subTest(target=target.name):
+				markup = f'<a data-wiki-link="{target.doc_key}">Safe label</a>'
+				self.assertEqual(resolve_wiki_links(markup, self.public_space.name), "Safe label")
+				self.assertNotIn(target.route, resolve_wiki_links(markup, self.public_space.name))
+		# Native Portal Only reads stay closed even for their own stamped target.
+		self.assertEqual(
+			resolve_wiki_links(f'<a data-wiki-link="{portal_page.doc_key}">Portal</a>', portal_space.name),
+			"Portal",
+		)
+
+	def test_metadata_cannot_borrow_write_permission_from_a_forged_space(self):
+		frappe.set_user("Administrator")
+		self.space_b.append("roles", {"role": TENANT_A_ROLE, "permission_level": "Write"})
+		self.space_b.save(ignore_permissions=True)
+		frappe.set_user(self.tenant_a_user)
+		page = frappe.get_doc("Wiki Document", self.page_a.name)
+		page.wiki_space = self.space_b.name
+		page.parent_wiki_document = self.space_b.root_group
+		page.content = "Injected content"
+		with self.assertRaises(frappe.PermissionError):
+			page.update_meta(meta_title="Injected metadata")
+		frappe.set_user("Administrator")
+		stored = frappe.get_doc("Wiki Document", self.page_a.name)
+		self.assertEqual(stored.wiki_space, self.space_a.name)
+		self.assertEqual(stored.parent_wiki_document, self.space_a.root_group)
+		self.assertEqual(stored.content, self.page_a.content)
+		self.assertFalse(stored.meta_title)
+
+	def test_authorized_metadata_update_discards_unsaved_business_fields(self):
+		frappe.set_user("Administrator")
+		self.space_a.roles[0].permission_level = "Write"
+		self.space_a.save(ignore_permissions=True)
+		frappe.set_user(self.tenant_a_user)
+		page = frappe.get_doc("Wiki Document", self.page_a.name)
+		page.wiki_space = self.space_b.name
+		page.parent_wiki_document = self.space_b.root_group
+		page.content = "Injected content"
+		page.title = "Injected title"
+		page.update_meta(meta_title="Approved metadata", disable_indexing=1)
+		frappe.set_user("Administrator")
+		stored = frappe.get_doc("Wiki Document", self.page_a.name)
+		self.assertEqual(stored.meta_title, "Approved metadata")
+		self.assertEqual(stored.disable_indexing, 1)
+		self.assertEqual(stored.wiki_space, self.space_a.name)
+		self.assertEqual(stored.parent_wiki_document, self.space_a.root_group)
+		self.assertEqual(stored.content, self.page_a.content)
+		self.assertEqual(stored.title, self.page_a.title)
+
+	def test_metadata_command_uses_the_native_post_only_request_guard(self):
+		with patch.object(frappe.local, "request", SimpleNamespace(method="GET"), create=True):
+			with self.assertRaises(frappe.PermissionError):
+				is_valid_http_method(WikiDocument.update_meta)
+		with patch.object(frappe.local, "request", SimpleNamespace(method="POST"), create=True):
+			is_valid_http_method(WikiDocument.update_meta)

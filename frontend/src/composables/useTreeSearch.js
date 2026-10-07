@@ -51,6 +51,8 @@ export function filterTree(children, query) {
 	const hits = fuzzysort
 		.go(q, flatten(children), {
 			keys: ['node.title', 'node.route', 'slug'],
+			// fuzzysort4 defaults to .5; retain candidates for our per-key title cut.
+			threshold: TITLE_THRESHOLD,
 		})
 		.filter(
 			(hit) =>
