@@ -31,6 +31,11 @@ test.describe('Command Palette', () => {
 		await page.keyboard.press('Enter');
 		await expect(palette).toBeHidden();
 		await expect(page).toHaveURL(target.url('page', seeded.name));
+		// URL changes before workspace hydration; wait for the destination read
+		// before deleting its fixture while native draft initialization is active.
+		await expect(page.locator('.ProseMirror')).toContainText(
+			`Content for ${token} Deploy Guide`,
+		);
 	});
 
 	test('opens a space by name, and closes on Escape', async ({
@@ -52,6 +57,9 @@ test.describe('Command Palette', () => {
 			.getByRole('option', { name: new RegExp(`${token} Space`) })
 			.click();
 		await expect(page).toHaveURL(target.url());
+		await expect(
+			page.getByText('Create your first page', { exact: true }),
+		).toBeVisible();
 
 		await page.keyboard.press('ControlOrMeta+k');
 		await expect(palette.getByRole('combobox')).toBeFocused();
@@ -96,6 +104,9 @@ test.describe('Command Palette', () => {
 		await recent.getByRole('option').click();
 		await expect(page).toHaveURL(
 			space.url('page', space.page(`${token} Runbook`).name),
+		);
+		await expect(page.locator('.ProseMirror')).toContainText(
+			`Content for ${token} Runbook`,
 		);
 	});
 
