@@ -29,6 +29,7 @@ declare global {
 			tree: DraftNode[];
 			rootKey: string | null;
 			crName: string | null;
+			isHydrating: boolean;
 			pagesByKey: Record<string, { content?: string | null }>;
 			moveNode: (args: {
 				docKey: string;
@@ -751,6 +752,103 @@ test.describe('Local-first draft workspace', () => {
 				{ timeout: 5000 },
 			)
 			.toBe(false);
+	});
+
+	test('creating two pages keeps the optimistic tree instead of rehydrating on draft navigation', async ({
+		page,
+		request,
+		wiki,
+	}) => {
+		const timestamp = Date.now();
+		const titles = [
+			`create-tree-first-${timestamp}`,
+			`create-tree-second-${timestamp}`,
+		];
+		await createSpaceViaUI(page, wiki);
+		await page.waitForFunction(() => !window.__draftStore.isHydrating);
+
+		// A route-owned hydration would snapshot the tree before the second
+		// create, then overwrite the two local nodes when that response lands.
+		// Hold only that real HTTP response; neither native create is mocked.
+		let firstCreated: () => void;
+		const firstCreateDone = new Promise<void>((resolve) => {
+			firstCreated = resolve;
+		});
+		let releaseTree: () => void;
+		const treeRelease = new Promise<void>((resolve) => {
+			releaseTree = resolve;
+		});
+		let creates = 0;
+		let treeReads = 0;
+		const treeHandlers: Promise<void>[] = [];
+		const treeMethod = `**/api/method/${CR_METHOD_PREFIX}.get_cr_tree`;
+		const createMethod = `**/api/method/${CR_METHOD_PREFIX}.apply_cr_operations`;
+		await page.route(createMethod, async (route) => {
+			const response = await route.fetch();
+			expect(response.ok()).toBe(true);
+			const result = await response.json();
+			expect(result.message.ok).toBe(true);
+			const raw = route.request().postDataJSON().operations;
+			const operations = typeof raw === 'string' ? JSON.parse(raw) : raw;
+			if (
+				operations.some((op: { type: string }) => op.type === 'create_node')
+			) {
+				creates += 1;
+				if (creates === 1) firstCreated();
+			}
+			await route.fulfill({ response });
+		});
+		await page.route(treeMethod, (route) => {
+			const work = (async () => {
+				treeReads += 1;
+				await firstCreateDone;
+				const response = await route.fetch();
+				expect(response.ok()).toBe(true);
+				await treeRelease;
+				await route.fulfill({ response });
+			})();
+			treeHandlers.push(work);
+			return work;
+		});
+		try {
+			await createPageViaUI(page, titles[0]);
+			await page.waitForFunction(() => {
+				const key = window.location.pathname.match(/\/draft\/([^/?#]+)/)?.[1];
+				return key && !decodeURIComponent(key).startsWith('tmp_');
+			});
+			const firstPath = new URL(page.url()).pathname;
+			await createPageViaUI(page, titles[1]);
+			await page.waitForFunction((previous) => {
+				const key = window.location.pathname.match(/\/draft\/([^/?#]+)/)?.[1];
+				return (
+					window.location.pathname !== previous &&
+					key &&
+					!decodeURIComponent(key).startsWith('tmp_')
+				);
+			}, firstPath);
+			releaseTree();
+			await Promise.all(treeHandlers);
+			for (const title of titles) {
+				await expect(
+					page.locator('aside').getByText(title, { exact: true }),
+				).toBeVisible();
+			}
+			expect(treeReads).toBe(0);
+			expect(creates).toBe(2);
+			const crName = await page.evaluate(() => window.__draftStore.crName);
+			const serverTree = await callMethod<{ children: { title: string }[] }>(
+				request,
+				`${CR_METHOD_PREFIX}.get_cr_tree`,
+				{ name: crName },
+			);
+			expect(serverTree.children.map((node) => node.title)).toEqual(titles);
+			await expect(page.locator('.ProseMirror').first()).toBeVisible();
+		} finally {
+			releaseTree();
+			await Promise.all(treeHandlers);
+			await page.unroute(createMethod);
+			await page.unroute(treeMethod);
+		}
 	});
 
 	for (const normalizedMatch of [false, true]) {

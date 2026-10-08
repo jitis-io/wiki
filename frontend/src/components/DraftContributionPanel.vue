@@ -289,12 +289,11 @@ function setCrPageFromStore(docKey, page = draftStore.pagesByKey[docKey]) {
 }
 
 onMounted(async () => {
-	if (props.spaceId) {
-		await draftStore.hydrate(props.spaceId);
-	}
+	// loadCrPage hydrates only an unready workspace. Rehydrating a ready one
+	// here can replace optimistic creates with a pre-create server tree.
+	await loadCrPage();
 	// Restored IndexedDB drafts may belong to pages never revisited.
 	draftStore.flushDirtyPages(props.docKey).catch(() => {});
-	await loadCrPage();
 });
 
 watch(

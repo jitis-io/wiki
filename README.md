@@ -26,6 +26,8 @@ No retry changes a revision, publication or permission decision.
 Writable editors wait for the current space's complete draft restoration before
 mounting. Real local edits survive that startup boundary; markdown that matches
 the confirmed server document is reconciled without phantom unsaved changes.
+Draft-page navigation reuses the ready workspace, so a late pre-create tree
+response cannot discard a newly created page from the sidebar.
 
 ## Frappe Wiki
 
